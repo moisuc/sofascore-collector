@@ -66,6 +66,7 @@ class DatabaseSummary(BaseModel):
     matches_by_status: dict[str, int]
     matches_by_sport: dict[str, int]
     last_updated: datetime | None = None
+    last_updated_by_sport: dict[str, datetime | None] = {}
 
 
 class HealthResponse(BaseModel):

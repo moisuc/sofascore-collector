@@ -14,7 +14,7 @@ from src.storage.database import (
     MatchStatistic as MatchStatisticModel,
     Team,
 )
-from src.storage.repositories import IncidentRepository, MatchStatisticRepository
+from src.storage.repositories import IncidentRepository, MatchRepository, MatchStatisticRepository
 
 router = APIRouter()
 
@@ -28,7 +28,7 @@ def get_match_statistics(
     Get all statistics for a specific match.
 
     Args:
-        match_id: Internal match ID
+        match_id: SofaScore match ID
         db: Database session
 
     Returns:
@@ -37,13 +37,14 @@ def get_match_statistics(
     Raises:
         HTTPException: 404 if match not found
     """
-    # Verify match exists
-    match = db.get(Match, match_id)
+    # Verify match exists using SofaScore ID
+    match_repo = MatchRepository(db)
+    match = match_repo.get_by_sofascore_id(match_id)
     if not match:
-        raise HTTPException(status_code=404, detail=f"Match with id {match_id} not found")
+        raise HTTPException(status_code=404, detail=f"Match with SofaScore ID {match_id} not found")
 
-    repo = MatchStatisticRepository(db)
-    statistics = repo.get_by_match(match_id)
+    stats_repo = MatchStatisticRepository(db)
+    statistics = stats_repo.get_by_match(match.id)
     return statistics
 
 
@@ -56,7 +57,7 @@ def get_match_incidents(
     Get all incidents (goals, cards, substitutions) for a specific match.
 
     Args:
-        match_id: Internal match ID
+        match_id: SofaScore match ID
         db: Database session
 
     Returns:
@@ -65,13 +66,14 @@ def get_match_incidents(
     Raises:
         HTTPException: 404 if match not found
     """
-    # Verify match exists
-    match = db.get(Match, match_id)
+    # Verify match exists using SofaScore ID
+    match_repo = MatchRepository(db)
+    match = match_repo.get_by_sofascore_id(match_id)
     if not match:
-        raise HTTPException(status_code=404, detail=f"Match with id {match_id} not found")
+        raise HTTPException(status_code=404, detail=f"Match with SofaScore ID {match_id} not found")
 
-    repo = IncidentRepository(db)
-    incidents = repo.get_by_match(match_id)
+    incident_repo = IncidentRepository(db)
+    incidents = incident_repo.get_by_match(match.id)
     return incidents
 
 
@@ -112,6 +114,14 @@ def get_database_summary(db: Session = Depends(get_db)) -> DatabaseSummary:
     # Get last update timestamp (most recent match update)
     last_updated = db.scalar(select(func.max(Match.updated_at)))
 
+    # Get last update timestamp per sport
+    last_updated_by_sport = {}
+    sport_updates = db.execute(
+        select(Match.sport, func.max(Match.updated_at)).group_by(Match.sport)
+    ).all()
+    for sport, updated_at in sport_updates:
+        last_updated_by_sport[sport.value] = updated_at
+
     return DatabaseSummary(
         total_teams=total_teams or 0,
         total_leagues=total_leagues or 0,
@@ -121,4 +131,5 @@ def get_database_summary(db: Session = Depends(get_db)) -> DatabaseSummary:
         matches_by_status=matches_by_status,
         matches_by_sport=matches_by_sport,
         last_updated=last_updated,
+        last_updated_by_sport=last_updated_by_sport,
     )

@@ -183,19 +183,39 @@ class MatchRepository:
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_by_sofascore_id(
-        self, sofascore_id: int, load_relations: bool = False
+        self, sofascore_id: int, load_relations: bool = False, load_details: bool = False
     ) -> Optional[Match]:
-        """Get match by SofaScore ID."""
+        """
+        Get match by SofaScore ID.
+
+        Args:
+            sofascore_id: SofaScore match ID
+            load_relations: If True, eagerly load teams and league
+            load_details: If True, also load statistics and incidents (includes load_relations)
+
+        Returns:
+            Match instance or None
+        """
         stmt = select(Match).where(Match.sofascore_id == sofascore_id)
 
-        if load_relations:
+        if load_details or load_relations:
             stmt = stmt.options(
                 joinedload(Match.home_team),
                 joinedload(Match.away_team),
                 joinedload(Match.league),
             )
 
-        return self.session.execute(stmt).scalar_one_or_none()
+        if load_details:
+            stmt = stmt.options(
+                joinedload(Match.statistics),
+                joinedload(Match.incidents),
+            )
+
+        # Use unique() when loading collections to deduplicate joined rows
+        result = self.session.execute(stmt)
+        if load_details:
+            return result.unique().scalar_one_or_none()
+        return result.scalar_one_or_none()
 
     def upsert(self, match_data: dict) -> Match:
         """

@@ -46,12 +46,12 @@ async def main():
         # Optional: Collect schedule window (past + future) for all sports
         # This collects historical and upcoming matches in a single operation
         # Uncomment to enable:
-        logger.info("Collecting schedule window for all sports...")
-        await coordinator.collect_schedule_window_for_all_sports(
-            days_past=3,   # Past 3 days
-            days_future=3  # Future 3 days
-        )
-        logger.info("Schedule window collection complete")
+        # logger.info("Collecting schedule window for all sports...")
+        # await coordinator.collect_schedule_window_for_all_sports(
+        #     days_past=3,   # Past 3 days
+        #     days_future=3  # Future 3 days
+        # )
+        # logger.info("Schedule window collection complete")
 
         # Show status
         status = coordinator.get_status()

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from src.api.dependencies import get_db
 from src.models.schemas import MatchDetail, MatchStatus, MatchWithRelations, Sport
 from src.storage.database import Match
+from src.storage.repositories import MatchRepository
 
 router = APIRouter()
 
@@ -94,7 +95,7 @@ def get_match_details(
     Get detailed match information including statistics and incidents.
 
     Args:
-        match_id: Internal match ID
+        match_id: SofaScore match ID
         db: Database session
 
     Returns:
@@ -103,22 +104,11 @@ def get_match_details(
     Raises:
         HTTPException: 404 if match not found
     """
-    # Load match with all relations
-    stmt = (
-        select(Match)
-        .where(Match.id == match_id)
-        .options(
-            joinedload(Match.home_team),
-            joinedload(Match.away_team),
-            joinedload(Match.league),
-            joinedload(Match.statistics),
-            joinedload(Match.incidents),
-        )
-    )
-
-    match = db.execute(stmt).scalar_one_or_none()
+    # Load match with all relations using repository
+    repo = MatchRepository(db)
+    match = repo.get_by_sofascore_id(match_id, load_details=True)
 
     if not match:
-        raise HTTPException(status_code=404, detail=f"Match with id {match_id} not found")
+        raise HTTPException(status_code=404, detail=f"Match with SofaScore ID {match_id} not found")
 
     return match
