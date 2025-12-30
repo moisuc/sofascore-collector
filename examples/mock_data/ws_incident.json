@@ -1,0 +1,26 @@
+{
+  "type": "incident",
+  "data": {
+    "eventId": 11867890,
+    "incident": {
+      "id": 987654321,
+      "type": "goal",
+      "time": 67,
+      "addedTime": null,
+      "isHome": true,
+      "player": {
+        "name": "Vinícius Júnior",
+        "slug": "vinicius-junior",
+        "shortName": "Vinícius Jr.",
+        "position": "F",
+        "id": 854499
+      },
+      "scoringTeam": "home",
+      "homeScore": 3,
+      "awayScore": 1,
+      "goalDescription": "Regular goal",
+      "incidentClass": "regular"
+    }
+  },
+  "timestamp": 1735578456
+}
