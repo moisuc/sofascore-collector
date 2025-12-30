@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime, date, timedelta
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from src.storage.database import Base, Sport, MatchStatus
 from src.storage.repositories import (
@@ -175,6 +175,24 @@ class TestTeamRepository:
         assert len(football_teams) == 1
         assert football_teams[0].sport == Sport.FOOTBALL
 
+    def test_upsert_with_extra_fields(self, team_repo, sample_team_data, session):
+        """Test that extra fields are filtered out when creating teams."""
+        # Add extra fields that don't exist on Team model
+        team_data_with_extras = sample_team_data.copy()
+        team_data_with_extras["unknown_field"] = "should be ignored"
+        team_data_with_extras["another_extra"] = 12345
+
+        # Should not raise an error
+        team = team_repo.upsert(team_data_with_extras)
+        session.commit()
+
+        assert team.id is not None
+        assert team.sofascore_id == 17
+        assert team.name == "Manchester City"
+        # Extra fields should not be on the model
+        assert not hasattr(team, "unknown_field")
+        assert not hasattr(team, "another_extra")
+
 
 class TestLeagueRepository:
     """Tests for LeagueRepository."""
@@ -208,6 +226,42 @@ class TestLeagueRepository:
 
         assert league2.id == original_id
         assert league2.priority == 2
+
+    def test_upsert_with_unique_tournament_slug(
+        self, league_repo, sample_league_data, session
+    ):
+        """Test creating league with unique_tournament_slug field."""
+        league_data = sample_league_data.copy()
+        league_data["unique_tournament_id"] = 100
+        league_data["unique_tournament_name"] = "Premier League"
+        league_data["unique_tournament_slug"] = "premier-league"
+
+        league = league_repo.upsert(league_data)
+        session.commit()
+
+        assert league.unique_tournament_id == 100
+        assert league.unique_tournament_name == "Premier League"
+        assert league.unique_tournament_slug == "premier-league"
+
+    def test_upsert_with_extra_fields(self, league_repo, sample_league_data, session):
+        """Test that extra fields are filtered out when creating leagues."""
+        # Add extra fields that don't exist on League model (simulating API response)
+        league_data_with_extras = sample_league_data.copy()
+        league_data_with_extras["category_slug"] = "england"
+        league_data_with_extras["category_id"] = 1
+        league_data_with_extras["flag"] = "gb"
+        league_data_with_extras["unknown_field"] = "ignored"
+
+        # Should not raise an error
+        league = league_repo.upsert(league_data_with_extras)
+        session.commit()
+
+        assert league.id is not None
+        assert league.sofascore_id == 17
+        # Extra fields should not be on the model
+        assert not hasattr(league, "category_slug")
+        assert not hasattr(league, "category_id")
+        assert not hasattr(league, "flag")
 
 
 class TestMatchRepository:

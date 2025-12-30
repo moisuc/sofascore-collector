@@ -58,8 +58,13 @@ class TeamRepository:
             team.updated_at = datetime.utcnow()
             logger.debug(f"Updated team: {team.name} (sofascore_id={sofascore_id})")
         else:
-            # Create new team
-            team = Team(**team_data)
+            # Create new team - filter to only valid fields
+            filtered_data = {
+                key: value
+                for key, value in team_data.items()
+                if hasattr(Team, key) and key not in ("id", "created_at")
+            }
+            team = Team(**filtered_data)
             self.session.add(team)
             logger.debug(f"Created new team: {team.name} (sofascore_id={sofascore_id})")
 
@@ -120,8 +125,13 @@ class LeagueRepository:
             league.updated_at = datetime.utcnow()
             logger.debug(f"Updated league: {league.name} (sofascore_id={sofascore_id})")
         else:
-            # Create new league
-            league = League(**league_data)
+            # Create new league - filter to only valid fields
+            filtered_data = {
+                key: value
+                for key, value in league_data.items()
+                if hasattr(League, key) and key not in ("id", "created_at")
+            }
+            league = League(**filtered_data)
             self.session.add(league)
             logger.debug(
                 f"Created new league: {league.name} (sofascore_id={sofascore_id})"
@@ -212,8 +222,13 @@ class MatchRepository:
             match.updated_at = datetime.utcnow()
             logger.debug(f"Updated match: {match.slug} (sofascore_id={sofascore_id})")
         else:
-            # Create new match
-            match = Match(**match_data)
+            # Create new match - filter to only valid fields
+            filtered_data = {
+                key: value
+                for key, value in match_data.items()
+                if hasattr(Match, key) and key not in ("id", "created_at")
+            }
+            match = Match(**filtered_data)
             self.session.add(match)
             logger.debug(
                 f"Created new match: {match.slug} (sofascore_id={sofascore_id})"

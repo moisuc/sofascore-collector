@@ -114,6 +114,7 @@ class League(Base):
     category_name: Mapped[Optional[str]] = mapped_column(String(255))
     unique_tournament_id: Mapped[Optional[int]] = mapped_column(Integer)
     unique_tournament_name: Mapped[Optional[str]] = mapped_column(String(255))
+    unique_tournament_slug: Mapped[Optional[str]] = mapped_column(String(255))
     priority: Mapped[int] = mapped_column(Integer, default=0)
     has_player_statistics: Mapped[bool] = mapped_column(Boolean, default=False)
 

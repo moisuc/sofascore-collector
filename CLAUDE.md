@@ -1,291 +1,333 @@
-# CLAUDE.md - SofaScore Collector
+# SofaScore Collector
 
-## Project Overview
+Live sports data collection system that intercepts SofaScore.com HTTP/WebSocket traffic via browser automation with REST API access.
 
-Un sistem de colectare date sportive de pe SofaScore folosind Playwright pentru interceptarea request-urilor și WebSocket-urilor. Datele sunt stocate în SQLite și expuse prin FastAPI.
+## Overview
 
-**Abordare cheie**: Nu facem request-uri directe la API. Navigăm pe pagini ca un user real și interceptăm răspunsurile pe care pagina le primește singură. Aceasta previne blocking-ul.
+Python-based sports data collector that uses Playwright to automate browsers, intercept network traffic, and store match data in SQLite. No direct SofaScore API calls - navigates like a real user and captures responses. Includes a FastAPI REST API for accessing collected data.
 
-## Tech Stack
+## Stack
 
-- **Python 3.11+**
-- **UV** - Package manager (NU pip)
-- **Playwright** - Browser automation + interception
-- **FastAPI** - API endpoints
-- **SQLAlchemy 2.0** - ORM (async-ready)
-- **SQLite** - Storage (poate fi migrat la PostgreSQL)
-- **Redis** - Cache pentru live data (opțional)
-- **Pydantic v2** - Validare și serialization
-
-## Project Structure
-```
-sofascore-collector/
-├── pyproject.toml          # Dependencies și config
-├── uv.lock                  # Lock file (auto-generat)
-├── CLAUDE.md               # Acest fișier
-├── Makefile                # Comenzi convenience
-├── src/
-│   ├── __init__.py
-│   ├── main.py             # Entry point collector
-│   ├── config.py           # Settings cu pydantic-settings
-│   ├── browser/
-│   │   ├── __init__.py
-│   │   ├── manager.py      # Browser pool management
-│   │   ├── interceptor.py  # HTTP response interceptor
-│   │   └── ws_interceptor.py  # WebSocket interceptor
-│   ├── collectors/
-│   │   ├── __init__.py
-│   │   ├── base.py         # Abstract base collector
-│   │   ├── live_tracker.py # Stă pe pagina live
-│   │   └── daily_events.py # Navighează pe zile
-│   ├── parsers/
-│   │   ├── __init__.py
-│   │   ├── api_response.py # Parse API JSON
-│   │   └── ws_message.py   # Parse WS messages
-│   ├── storage/
-│   │   ├── __init__.py
-│   │   ├── database.py     # SQLAlchemy models
-│   │   └── repositories.py # CRUD operations
-│   ├── orchestrator/
-│   │   ├── __init__.py
-│   │   └── coordinator.py  # Coordonează collectors
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── main.py         # FastAPI app
-│   │   ├── dependencies.py # DB session injection
-│   │   ├── schemas.py      # Pydantic response models
-│   │   └── routes/
-│   │       ├── __init__.py
-│   │       ├── matches.py
-│   │       ├── live.py
-│   │       ├── sports.py
-│   │       └── stats.py
-│   └── models/
-│       ├── __init__.py
-│       └── schemas.py      # Shared Pydantic models
-├── data/
-│   └── sofascore.db        # SQLite database
-└── tests/
-    └── ...
-```
+- **Language**: Python 3.14+
+- **Framework**: FastAPI (REST API server)
+- **Browser Automation**: Playwright
+- **Database**: SQLite (SQLAlchemy ORM)
+- **Task Scheduling**: APScheduler
+- **Cache** (optional): Redis
+- **Testing**: pytest + pytest-asyncio (4,883 test lines)
+- **Linter**: Ruff
 
 ## Commands
+
 ```bash
-# Install dependencies
-uv sync
-uv run playwright install chromium
+# Setup
+uv sync                          # Install dependencies
+uv sync --group dev              # Install dev dependencies
+playwright install               # Install browser binaries
 
-# Run collector (interceptează date de pe SofaScore)
-uv run python -m src.main
+# Run
+uv run python main.py            # Run orchestrator with live trackers
+uv run uvicorn src.api.main:app --reload  # Start FastAPI server (dev mode)
+uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000  # Production
 
-# Run API server
-uv run uvicorn src.api.main:app --reload --port 8000
+# Examples
+uv run python examples/browser_usage.py
+uv run python examples/collector_usage.py
+uv run python examples/orchestrator_usage.py
 
-# Run both (în terminale separate)
-make collector  # Terminal 1
-make api        # Terminal 2
+# Testing
+uv run pytest                    # Run all tests
+uv run pytest tests/parsers/     # Run specific test module
+uv run pytest -v                 # Verbose output
+uv run pytest -k "test_name"     # Run specific test
 
-# Tests
-uv run pytest -v
+# Linting
+uv run ruff check .              # Check code quality
+uv run ruff format .             # Format code
+uv run ruff check --fix .        # Auto-fix issues
 
-# Lint & format
-uv run ruff check src/
-uv run ruff format src/
+# Database
+uv run python -m src.storage.init_db  # Initialize database
 ```
 
-## Architecture Principles
+## Structure
 
-### 1. Playwright Interception (NU direct API calls)
-```python
-# ✅ CORECT - Interceptăm ce face pagina
-page.on('response', handle_response)
-await page.goto('https://www.sofascore.com/football/livescore')
-
-# ❌ GREȘIT - Request direct la API
-httpx.get('https://api.sofascore.com/api/v1/...')
+```
+sofascore-collector/
+├── src/
+│   ├── browser/         # Playwright browser automation + interceptors
+│   │   ├── manager.py           # Browser instance management
+│   │   ├── interceptor.py       # HTTP response interception
+│   │   └── ws_interceptor.py    # WebSocket message interception
+│   ├── collectors/      # Data collection strategies
+│   │   ├── base.py              # Abstract base collector
+│   │   ├── live_tracker.py      # Live match tracking
+│   │   └── daily_events.py      # Scheduled match collection
+│   ├── parsers/         # Response parsing logic
+│   │   ├── api_response.py      # HTTP API response parsing
+│   │   └── ws_message.py        # WebSocket message parsing
+│   ├── storage/         # Database layer
+│   │   ├── database.py          # SQLAlchemy models
+│   │   ├── repositories.py      # CRUD operations (with field filtering)
+│   │   └── init_db.py           # Database initialization
+│   ├── models/          # Pydantic models (data validation)
+│   │   └── schemas.py           # API request/response schemas
+│   ├── orchestrator/    # Multi-collector coordination
+│   │   ├── coordinator.py       # Main orchestrator
+│   │   └── handlers.py          # Data persistence handlers
+│   ├── api/             # FastAPI REST API
+│   │   ├── main.py              # FastAPI app + middleware
+│   │   ├── routes/              # API route modules
+│   │   │   ├── live.py          # Live matches endpoints
+│   │   │   ├── matches.py       # Match history endpoints
+│   │   │   ├── sports.py        # Sports/teams/leagues endpoints
+│   │   │   └── stats.py         # Statistics endpoints
+│   │   ├── dependencies.py      # Dependency injection (DB sessions)
+│   │   └── schemas.py           # API schemas
+│   └── config.py        # Settings (loads from .env)
+├── tests/               # Comprehensive test suite (mirrors src/)
+│   ├── browser/         # Browser automation tests
+│   ├── collectors/      # Collector tests
+│   ├── orchestrator/    # Orchestrator tests
+│   ├── parsers/         # Parser tests
+│   ├── storage/         # Repository tests
+│   └── conftest.py      # Shared pytest fixtures
+├── examples/            # Usage examples
+│   ├── mock_data/       # Sample API responses for testing
+│   ├── browser_usage.py
+│   ├── collector_usage.py
+│   └── orchestrator_usage.py
+├── data/                # SQLite database storage
+├── main.py              # Production entry point (orchestrator)
+└── pyproject.toml       # Project config + dependencies
 ```
 
-### 2. Patterns de Interes pentru Interceptare
-```python
-PATTERNS = {
-    'scheduled': r'/api/v1/sport/(\w+)/scheduled-events/(\d{4}-\d{2}-\d{2})',
-    'live': r'/api/v1/sport/(\w+)/events/live',
-}
-```
+## Architecture Patterns
 
-### 3. Sports Supported
+### 1. Browser Automation Strategy
+- **No Direct API Calls**: Navigate pages like a real user, intercept network responses
+- **Isolated Contexts**: Each sport gets its own browser context
+- **Dual Interception**: HTTP responses (REST API) + WebSocket messages (live updates)
 
-- `football`
-- `tennis`
-- `basketball`
-- `handball`
-- `volleyball`
+### 2. Collector Pattern
+All collectors inherit from `BaseCollector`:
+- `setup()` - Initialize browser page and interceptors
+- `collect()` - Main data collection logic (abstract method)
+- `cleanup()` - Resource cleanup
+- Built-in retry logic with exponential backoff (5 retries max)
+- Context manager support (`async with`)
 
-### 4. Match Status Flow
-```
-SCHEDULED → LIVE → FINISHED
-                → POSTPONED
-                → CANCELLED
-```
+### 3. Repository Pattern
+Database operations use repository classes with field filtering:
+- `TeamRepository`, `LeagueRepository`, `MatchRepository`, etc.
+- All repos have `upsert()` methods (insert or update based on `sofascore_id`)
+- **Field Filtering**: Repositories automatically filter out unknown fields from API responses
+- Eager loading support via `load_relations` parameter
+- Prevents `TypeError` when API returns unexpected fields
 
-## Database Schema
+### 4. Rate Limiting
+- Navigation delays: 2-5 seconds (randomized)
+- Page refresh: Every 5 minutes
+- Backfill mode: 10 seconds between requests
 
-### Core Tables
+### 5. Orchestrator Pattern
+Coordinates multiple collectors:
+- **Lifecycle Management**: Start/stop collectors across sports
+- **Data Flow**: Interceptors → Parsers → Handlers → Repositories → Database
+- **Auto-initialization**: Database + Browser Manager setup
+- **Graceful Shutdown**: Cleanup all resources on exit
+- **Status Monitoring**: Real-time collector status tracking
 
-- **matches** - Meciuri (sofascore_id, sport, teams, score, status, start_time)
-- **teams** - Echipe (sofascore_id, name, sport, country)
-- **leagues** - Competiții (sofascore_id, name, sport, country)
-- **match_statistics** - Statistici post-meci
-- **incidents** - Evenimente (goluri, cartonașe, etc.)
+### 6. REST API Layer
+FastAPI-based REST API for accessing collected data:
+- **CORS-enabled** for cross-origin requests
+- **OpenAPI docs** at `/docs` (Swagger UI) and `/redoc`
+- **Health check** endpoint at `/health`
+- **Structured routes**: `/live`, `/matches`, `/sports`, `/stats`
 
-### Key Indexes
-```sql
-CREATE INDEX ix_matches_sport_status ON matches(sport, status);
-CREATE INDEX ix_matches_sport_date ON matches(sport, start_time);
-CREATE UNIQUE INDEX ix_matches_sofascore_id ON matches(sofascore_id);
-```
+## Conventions
 
-## API Endpoints
+### Naming
+- **Files/Modules**: `snake_case` (e.g., `live_tracker.py`)
+- **Classes**: `PascalCase` (e.g., `LiveTracker`, `BaseCollector`)
+- **Functions/Variables**: `snake_case` (e.g., `get_by_sofascore_id`)
+- **Async Functions**: Prefixed with `async def` (all I/O operations are async)
 
-| Method | Endpoint | Descriere |
-|--------|----------|-----------|
-| GET | `/live` | Toate meciurile live |
-| GET | `/live/{sport}` | Live per sport |
-| GET | `/matches` | Meciuri cu filtre (sport, status, date, team) |
-| GET | `/matches/{id}` | Detalii meci |
-| GET | `/sports` | Lista sporturi |
-| GET | `/sports/{sport}/today` | Meciuri de azi |
-| GET | `/sports/{sport}/upcoming` | Meciuri viitoare |
-| GET | `/sports/{sport}/finished` | Meciuri terminate |
-| GET | `/sports/{sport}/leagues` | Ligi per sport |
-| GET | `/stats/match/{id}` | Statistici meci |
-| GET | `/stats/summary` | Sumar DB |
-
-## Coding Conventions
-
-### Python Style
-
-- **Ruff** pentru linting și formatting
-- Line length: 100
-- Type hints obligatorii pentru funcții publice
-- Docstrings pentru clase și funcții complexe
-
-### Async/Await
-
-- Tot codul Playwright este async
-- Folosim `asyncio.gather()` pentru paralelism
-- `asyncio.Queue()` pentru comunicare între componente
-
-### Pydantic Models
-```python
-# Response models în src/api/schemas.py
-class MatchList(BaseModel):
-    id: int
-    sofascore_id: int
-    sport: SportEnum
-    # ...
-    
-    class Config:
-        from_attributes = True  # Pentru SQLAlchemy
-```
-
-### Repository Pattern
-```python
-# Fiecare entitate are repository în src/storage/repositories.py
-class MatchRepository:
-    def __init__(self, session: Session):
-        self.session = session
-    
-    def upsert_match(self, data: dict) -> Match: ...
-    def get_live(self, sport: str = None) -> list[Match]: ...
-```
-
-## Important Implementation Notes
-
-### Browser Manager
-
-- Rulează headless în producție
-- Un browser context per sport pentru izolare
-- Refresh periodic (5 min) pentru a menține conexiunea
-
-### WebSocket Handling
-
-- Pagina deschide WS automat
-- Interceptăm cu `page.on('websocket', handler)`
-- Ascultăm `framereceived` pentru updates
+### Type Hints
+- Modern Python 3.14 syntax: `str | None` instead of `Optional[str]`
+- Return types always specified
+- Pydantic models for data validation
 
 ### Error Handling
+- Use built-in logging module (`logging.getLogger(__name__)`)
+- Collectors have automatic retry with exponential backoff (5 retries max)
+- Graceful degradation - log errors but continue running
+- API endpoints return proper HTTP status codes
 
-- Retry cu exponential backoff pentru network errors
-- Graceful degradation dacă un sport fail-uiește
-- Logging comprehensiv
+### Testing
+- Test files mirror `src/` structure: `tests/parsers/test_api_response.py`
+- Use pytest fixtures from `conftest.py`
+- Async tests use `@pytest.mark.asyncio`
+- Mock external dependencies (browser, network)
+- Mock data in `examples/mock_data/` for realistic testing
 
-### Rate Limiting (Self-Imposed)
-
-- Delay între navigări: 2-5 secunde
-- Refresh pages: la 5 minute
-- Backfill historic: 10 secunde între requests
+### Database
+- All tables have `id`, `created_at`, `updated_at`
+- Foreign keys reference SofaScore IDs (`sofascore_id` field)
+- Use `upsert()` pattern to avoid duplicates
+- Enums for constrained fields (`Sport`, `MatchStatus`)
+- **Repository field filtering** prevents errors from API schema changes
 
 ## Environment Variables
-```bash
-# .env
+
+Create a `.env` file:
+
+```env
+# Browser
 HEADLESS=true
+
+# Database
 DATABASE_URL=sqlite:///data/sofascore.db
+
+# Redis (optional)
 REDIS_URL=redis://localhost:6379
+
+# Logging
 LOG_LEVEL=INFO
+
+# Sports to track
+SPORTS=football,tennis,basketball,handball,volleyball
+
+# Rate limiting
+NAVIGATION_DELAY_MIN=2
+NAVIGATION_DELAY_MAX=5
+PAGE_REFRESH_INTERVAL=300
+BACKFILL_DELAY=10
+
+# API (optional)
+API_HOST=0.0.0.0
+API_PORT=8000
 ```
 
-## Testing
+## Quick Reference
+
+### Key Files
+- `src/config.py` - Central configuration (loads from `.env`)
+- `src/collectors/base.py` - Base class for all collectors
+- `src/orchestrator/coordinator.py` - Multi-collector orchestration
+- `src/storage/repositories.py` - Database CRUD with field filtering
+- `src/api/main.py` - FastAPI application entry point
+- `src/browser/README.md` - Browser module documentation
+- `examples/orchestrator_usage.py` - Orchestrator usage examples
+- `main.py` - Production entry point (uses orchestrator)
+
+### API Endpoints
+Once the API server is running (`uvicorn src.api.main:app`):
+- `GET /` - API info and links
+- `GET /health` - Health check with database status
+- `GET /docs` - Interactive API documentation (Swagger UI)
+- `GET /live` - Live matches (all sports or filtered)
+- `GET /matches` - Match history with filters
+- `GET /sports/{sport}` - Teams and leagues for a sport
+- `GET /stats/{match_id}` - Match statistics and incidents
+
+### Interceptor Patterns
+HTTP patterns matched:
+- `live` - Live events
+- `scheduled` - Scheduled events for a date
+- `event` - Event/match details
+- `statistics` - Match statistics
+- `incidents` - Goals, cards, substitutions
+- `lineups`, `h2h`, `odds`, `team`, `league`
+
+### WebSocket Modes
+- **Generic Mode**: All messages via `on_message(handler)`
+- **Live Score Mode**: Specialized handlers for `on_score_update()` and `on_incident()`
+
+### Database Schema
+Core entities:
+- `Sport` (enum), `Team`, `League`, `Match`
+- `MatchStatistic`, `Incident` (goals, cards, etc.)
+- All linked via `sofascore_id` foreign keys
+
+Recent schema updates:
+- `League.unique_tournament_slug` - Added for complete tournament info
+
+## Development Workflow
+
+### Using the Orchestrator (Recommended)
+
+1. **Start the orchestrator**: Use `create_coordinator()` or context manager
+2. **Add collectors**: Use `add_live_tracker()` or `add_daily_collector()`
+3. **Monitor status**: Call `get_status()` to see running collectors
+4. **Graceful shutdown**: Orchestrator handles cleanup automatically
+
 ```python
-# tests/test_interceptor.py
-@pytest.mark.asyncio
-async def test_api_interceptor_captures_matches():
-    # ...
+coordinator = await create_coordinator()
+
+try:
+    # Add live trackers for all sports
+    await coordinator.add_live_trackers_for_all_sports()
+
+    # Optional: Collect upcoming matches
+    await coordinator.collect_upcoming_matches('football', days_ahead=7)
+
+    # Run until interrupted
+    await coordinator.run_forever()
+
+finally:
+    await coordinator.cleanup()
 ```
 
-## Deployment Notes
+See `examples/orchestrator_usage.py` for complete patterns.
 
-- Playwright necesită browsere instalate (`playwright install chromium`)
-- În Docker, trebuie dependențe sistem pentru Chromium
-- SQLite funcționează pentru volum mic/mediu
-- Pentru scale, migrează la PostgreSQL + connection pooling
+### Running the API Server
 
-## Common Tasks
+```bash
+# Development mode (auto-reload)
+uv run uvicorn src.api.main:app --reload
 
-### Adaugă un sport nou
+# Production mode
+uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
 
-1. Adaugă în `Sport` enum (`storage/database.py`)
-2. Adaugă URL în `LivePageCollector.LIVE_URLS`
-3. Adaugă în `SPORTS` list din `config.py`
-
-### Adaugă un endpoint nou
-
-1. Creează route în `src/api/routes/`
-2. Adaugă response schema în `src/api/schemas.py`
-3. Include router în `src/api/main.py`
-
-### Adaugă statistică nouă
-
-1. Identifică pattern-ul API din DevTools
-2. Adaugă în `PATTERNS` dict
-3. Creează parser în `src/parsers/`
-4. Adaugă model dacă e nevoie
-
-## Troubleshooting
-
-### Browser crashes
-```python
-# Mărește timeout-ul
-await page.goto(url, timeout=60000)
+# Access API docs
+open http://localhost:8000/docs
 ```
 
-### Missing data
+### Manual Collector Development
 
-- Verifică că pagina s-a încărcat complet (`wait_until='networkidle'`)
-- Scroll pentru lazy-loaded content
-- Verifică pattern-urile de interceptare
+1. **Create a new collector**: Inherit from `BaseCollector`, implement `collect()`
+2. **Setup interceptors**: Use `create_interceptor()` and `create_ws_interceptor()`
+3. **Handle data**: Register handlers with `.on(pattern, handler)`
+4. **Store data**: Use repositories to upsert parsed data
+5. **Test**: Write async tests using pytest fixtures
 
-### Database locked (SQLite)
+See `examples/collector_usage.py` for manual collector patterns.
 
-- Folosește un singur writer
-- Sau migrează la PostgreSQL
+## Testing Strategy
+
+The project has comprehensive test coverage (~4,883 lines of test code):
+
+- **Browser Tests**: Browser manager, interceptors, WebSocket handling
+- **Collector Tests**: Base collector, live tracker, daily events
+- **Parser Tests**: API response parsing, WebSocket message parsing
+- **Storage Tests**: Repository operations, field filtering, upsert logic
+- **Orchestrator Tests**: Coordinator, handlers, lifecycle management
+
+Run specific test suites:
+```bash
+uv run pytest tests/storage/     # Repository tests
+uv run pytest tests/parsers/     # Parser tests
+uv run pytest tests/collectors/  # Collector tests
+```
+
+## Recent Improvements
+
+### Field Filtering in Repositories
+Repositories now automatically filter out unknown fields when creating database records. This prevents `TypeError` exceptions when SofaScore API adds new fields that aren't in our models.
+
+Example: When API returns `category_slug`, `category_id`, or `flag` fields not defined in `League` model, they're silently filtered out instead of causing errors.
+
+### Database Schema Updates
+- Added `League.unique_tournament_slug` field to match API responses
+- Database migration handled automatically via SQLAlchemy

@@ -38,6 +38,7 @@ class LiveTracker(BaseCollector):
         browser_manager: BrowserManager,
         sport: str,
         on_live_data: Any = None,
+        on_scheduled_data: Any = None,
         on_score_update: Any = None,
         on_incident: Any = None,
     ):
@@ -49,6 +50,8 @@ class LiveTracker(BaseCollector):
             sport: Sport to track (e.g., 'football', 'tennis')
             on_live_data: Async callback for live match data from HTTP responses
                           Signature: async def(data: dict, match: re.Match) -> None
+            on_scheduled_data: Async callback for scheduled match data from HTTP responses
+                              Signature: async def(data: dict, match: re.Match) -> None
             on_score_update: Async callback for WebSocket score updates
                            Signature: async def(data: dict) -> None
             on_incident: Async callback for WebSocket incident updates
@@ -66,6 +69,7 @@ class LiveTracker(BaseCollector):
 
         self.url = self.LIVE_URLS[sport]
         self.on_live_data = on_live_data
+        self.on_scheduled_data = on_scheduled_data
         self.on_score_update = on_score_update
         self.on_incident = on_incident
 
@@ -75,10 +79,15 @@ class LiveTracker(BaseCollector):
         """Setup page and register interceptor handlers."""
         await super().setup()
 
-        # Register HTTP response handler for live events
-        if self.http_interceptor and self.on_live_data:
-            self.http_interceptor.on("live", self._handle_live_response)
-            logger.debug(f"Registered HTTP handler for live {self.sport} data")
+        # Register HTTP response handlers
+        if self.http_interceptor:
+            if self.on_live_data:
+                self.http_interceptor.on("live", self._handle_live_response)
+                logger.debug(f"Registered HTTP handler for live {self.sport} data")
+
+            if self.on_scheduled_data:
+                self.http_interceptor.on("scheduled", self._handle_scheduled_response)
+                logger.debug(f"Registered HTTP handler for scheduled {self.sport} data")
 
         # Register WebSocket handlers
         if self.ws_interceptor:
@@ -200,6 +209,38 @@ class LiveTracker(BaseCollector):
                 f"Error handling live response for {self.sport}: {e}", exc_info=True
             )
 
+    async def _handle_scheduled_response(self, data: dict, match: re.Match) -> None:
+        """
+        Handle intercepted scheduled events HTTP response.
+
+        Args:
+            data: JSON response data
+            match: Regex match object containing URL groups
+        """
+        try:
+            sport_from_url = match.group(1) if match.lastindex >= 1 else None
+
+            # Verify this is our sport
+            if sport_from_url and sport_from_url != self.sport:
+                logger.debug(
+                    f"Ignoring scheduled data for different sport: {sport_from_url}"
+                )
+                return
+
+            logger.info(
+                f"Scheduled data intercepted for {self.sport}: "
+                f"{len(data.get('events', []))} events"
+            )
+
+            # Call user-provided handler
+            if self.on_scheduled_data:
+                await self.on_scheduled_data(data, match)
+
+        except Exception as e:
+            logger.error(
+                f"Error handling scheduled response for {self.sport}: {e}", exc_info=True
+            )
+
     async def _handle_ws_message(self, data: dict) -> None:
         """
         Handle WebSocket message (fallback for generic interceptor).
@@ -243,6 +284,7 @@ async def create_live_tracker(
     browser_manager: BrowserManager,
     sport: str,
     on_live_data: Any = None,
+    on_scheduled_data: Any = None,
     on_score_update: Any = None,
     on_incident: Any = None,
 ) -> LiveTracker:
@@ -253,6 +295,7 @@ async def create_live_tracker(
         browser_manager: BrowserManager instance
         sport: Sport to track
         on_live_data: Callback for live match data
+        on_scheduled_data: Callback for scheduled match data
         on_score_update: Callback for score updates
         on_incident: Callback for incidents
 
@@ -274,6 +317,7 @@ async def create_live_tracker(
         browser_manager,
         sport=sport,
         on_live_data=on_live_data,
+        on_scheduled_data=on_scheduled_data,
         on_score_update=on_score_update,
         on_incident=on_incident,
     )
