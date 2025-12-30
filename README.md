@@ -128,10 +128,5 @@ uv run ruff format .
 4. **Storage**: Saves to SQLite with automatic deduplication
 5. **API Access**: Exposes collected data via FastAPI endpoints
 
-## License
 
-MIT
 
-## Contributing
-
-Contributions welcome! Please check out the [project documentation](CLAUDE.md) for architecture details and conventions.
