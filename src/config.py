@@ -32,6 +32,22 @@ class Settings(BaseSettings):
     page_refresh_interval: int = 300  # 5 minutes in seconds
     backfill_delay: int = 10  # seconds between backfill requests
 
+    # Memory Management
+    max_db_sessions: int = 10  # Maximum database sessions in pool
+    min_db_sessions: int = 2  # Minimum sessions to keep in pool
+    session_idle_timeout: float = 300.0  # Session idle timeout in seconds (5 min)
+    session_acquire_timeout: float = 30.0  # Max wait time for session acquisition
+
+    max_contexts_per_sport: int = 2  # Max browser contexts per sport
+    context_idle_timeout: float = 600.0  # Context idle timeout in seconds (10 min)
+
+    max_queue_size: int = 1000  # Maximum size for interceptor queues
+
+    cleanup_interval: float = 60.0  # Run cleanup every N seconds
+
+    memory_warning_threshold: float = 0.8  # Warn at 80% memory usage
+    memory_critical_threshold: float = 0.95  # Critical at 95% memory usage
+
 
 # Global settings instance
 settings = Settings()
