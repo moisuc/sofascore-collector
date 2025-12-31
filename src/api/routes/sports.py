@@ -52,7 +52,7 @@ def get_today_matches(
 @router.get("/{sport}/upcoming", response_model=list[MatchWithRelations])
 def get_upcoming_matches(
     sport: Sport,
-    limit: int = Query(100, ge=1, le=500, description="Maximum results"),
+    limit: int = Query(100, ge=1, le=5000, description="Maximum results"),
     db: Session = Depends(get_db),
 ) -> list[Match]:
     """
@@ -78,7 +78,7 @@ def get_upcoming_matches(
 @router.get("/{sport}/finished", response_model=list[MatchWithRelations])
 def get_finished_matches(
     sport: Sport,
-    limit: int = Query(100, ge=1, le=500, description="Maximum results"),
+    limit: int = Query(100, ge=1, le=5000, description="Maximum results"),
     db: Session = Depends(get_db),
 ) -> list[Match]:
     """

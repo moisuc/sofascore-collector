@@ -1,12 +1,11 @@
 """Statistics and database summary endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
 from src.api.schemas import DatabaseSummary
-from src.models.schemas import Incident, MatchStatistic
 from src.storage.database import (
     Incident as IncidentModel,
     League,
@@ -14,67 +13,11 @@ from src.storage.database import (
     MatchStatistic as MatchStatisticModel,
     Team,
 )
-from src.storage.repositories import IncidentRepository, MatchRepository, MatchStatisticRepository
+
 
 router = APIRouter()
 
 
-@router.get("/match/{match_id}/statistics", response_model=list[MatchStatistic])
-def get_match_statistics(
-    match_id: int,
-    db: Session = Depends(get_db),
-) -> list[MatchStatisticModel]:
-    """
-    Get all statistics for a specific match.
-
-    Args:
-        match_id: SofaScore match ID
-        db: Database session
-
-    Returns:
-        List of match statistics
-
-    Raises:
-        HTTPException: 404 if match not found
-    """
-    # Verify match exists using SofaScore ID
-    match_repo = MatchRepository(db)
-    match = match_repo.get_by_sofascore_id(match_id)
-    if not match:
-        raise HTTPException(status_code=404, detail=f"Match with SofaScore ID {match_id} not found")
-
-    stats_repo = MatchStatisticRepository(db)
-    statistics = stats_repo.get_by_match(match.id)
-    return statistics
-
-
-@router.get("/match/{match_id}/incidents", response_model=list[Incident])
-def get_match_incidents(
-    match_id: int,
-    db: Session = Depends(get_db),
-) -> list[IncidentModel]:
-    """
-    Get all incidents (goals, cards, substitutions) for a specific match.
-
-    Args:
-        match_id: SofaScore match ID
-        db: Database session
-
-    Returns:
-        List of match incidents ordered by time
-
-    Raises:
-        HTTPException: 404 if match not found
-    """
-    # Verify match exists using SofaScore ID
-    match_repo = MatchRepository(db)
-    match = match_repo.get_by_sofascore_id(match_id)
-    if not match:
-        raise HTTPException(status_code=404, detail=f"Match with SofaScore ID {match_id} not found")
-
-    incident_repo = IncidentRepository(db)
-    incidents = incident_repo.get_by_match(match.id)
-    return incidents
 
 
 @router.get("/summary", response_model=DatabaseSummary)

@@ -23,7 +23,7 @@ def get_matches(
     date_to: str | None = Query(None, description="Filter to date (YYYY-MM-DD)"),
     team_id: int | None = Query(None, description="Filter by team ID (home or away)"),
     league_id: int | None = Query(None, description="Filter by league ID"),
-    limit: int = Query(50, ge=1, le=500, description="Maximum results"),
+    limit: int = Query(50, ge=1, le=5000, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
     db: Session = Depends(get_db),
 ) -> list[Match]:
