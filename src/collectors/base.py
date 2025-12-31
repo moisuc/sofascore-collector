@@ -135,10 +135,14 @@ class BaseCollector(ABC):
 
         self.http_interceptor = await create_interceptor(self.page)
 
-        # Setup WebSocket interceptor
-        from src.browser.ws_interceptor import create_ws_interceptor
+        # Setup WebSocket interceptor (if enabled)
+        if settings.enable_ws_interceptor:
+            from src.browser.ws_interceptor import create_ws_interceptor
 
-        self.ws_interceptor = await create_ws_interceptor(self.page)
+            self.ws_interceptor = await create_ws_interceptor(self.page)
+            logger.debug(f"WebSocket interceptor enabled for '{self.context_name}'")
+        else:
+            logger.debug(f"WebSocket interceptor disabled for '{self.context_name}'")
 
         logger.debug(f"Collector '{self.context_name}' setup complete")
 
@@ -268,6 +272,10 @@ class BaseCollector(ABC):
         This method looks for buttons containing "Show all" text and clicks them
         to reveal additional content that might be hidden by default.
 
+        NOTE: This method re-queries for buttons after each click because clicking
+        a "Show all" button typically modifies the DOM, making previous button
+        references stale.
+
         Args:
             wait_after: Seconds to wait after clicking buttons for content to expand
 
@@ -281,39 +289,94 @@ class BaseCollector(ABC):
             raise RuntimeError("Page not initialized. Call setup() first.")
 
         try:
-            # Find all "Show all" buttons using text content
-            buttons = self.page.get_by_role("button", name="Show all")
-            button_count = await buttons.count()
-
-            if button_count == 0:
-                logger.debug("No 'Show all' buttons found on page")
-                return 0
-
-            logger.info(f"Found {button_count} 'Show all' button(s), clicking them...")
-
-            # Click each button
             clicked = 0
-            for i in range(button_count):
-                try:
-                    button = buttons.nth(i)
-                    # Check if button is visible before clicking
+            max_iterations = 20  # Prevent infinite loops
+            iteration = 0
 
-                    
-                    if await button.is_visible():
-                        await button.click()
-                        clicked += 1
-                        logger.debug(f"Clicked 'Show all' button {i + 1}/{button_count}")
-                        # Small delay between clicks
-                        if i < button_count - 1:
-                            await asyncio.sleep(4)
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to click 'Show all' button {i + 1}: {e}"
-                    )
-                    continue
+            while iteration < max_iterations:
+                # Re-query for buttons each iteration (DOM changes after each click)
+                # Use CSS selector for better reliability
+                #div with class 
+                buttons = self.page.locator("button:has-text('Show all')")
+                
+                button_count = await buttons.count()
+
+                if button_count == 0:
+                    buttons = self.page.locator("button:has-text('Arată tot')")
+                
+                    button_count = await buttons.count()
+
+                if button_count == 0:
+                    if clicked == 0:
+                        logger.debug("No 'Show all' buttons found on page")
+                    else:
+                        logger.debug(f"No more 'Show all' buttons found (clicked {clicked} total)")
+                    break
+
+                logger.debug(f"Found {button_count} 'Show all' button(s) (iteration {iteration + 1})")
+
+                # Try to click the first visible button
+                button_clicked = False
+                for i in range(button_count):
+                    try:
+                        button = buttons.nth(i)
+
+                        # Check if button is visible
+                        if not await button.is_visible():
+                            logger.debug(f"Button {i} not visible, skipping")
+                            continue
+
+                        # Scroll button into view to ensure it's actionable
+                        try:
+                            await button.scroll_into_view_if_needed(timeout=3000)
+                        except Exception as scroll_error:
+                            logger.debug(f"Could not scroll button {i} into view: {scroll_error}")
+                            continue
+
+                        # Wait a moment for any animations to complete
+                        await asyncio.sleep(0.3)
+
+                        # Attempt to click with timeout
+                        try:
+                            await button.click(timeout=5000)
+                            clicked += 1
+                            button_clicked = True
+                            logger.debug(f"Clicked 'Show all' button {clicked}")
+
+                            # Wait for DOM to update after click
+                            await asyncio.sleep(1.0)
+                            break  # Exit inner loop after successful click
+
+                        except Exception as click_error:
+                            # Try force click as fallback
+                            logger.debug(f"Normal click failed for button {i}, trying force click: {click_error}")
+                            try:
+                                await button.click(force=True, timeout=5000)
+                                clicked += 1
+                                button_clicked = True
+                                logger.debug(f"Force-clicked 'Show all' button {clicked}")
+
+                                # Wait for DOM to update after click
+                                await asyncio.sleep(1.0)
+                                break  # Exit inner loop after successful click
+
+                            except Exception as force_error:
+                                logger.debug(f"Force click also failed for button {i}: {force_error}")
+                                continue
+
+                    except Exception as e:
+                        logger.debug(f"Failed to process button {i}: {e}")
+                        continue
+
+                if not button_clicked:
+                    # No button was clicked in this iteration, exit
+                    logger.debug("No visible 'Show all' buttons could be clicked")
+                    break
+
+                iteration += 1
 
             if clicked > 0:
-                # Wait for content to expand after clicking
+                # Wait for content to expand after all clicks
                 logger.debug(f"Waiting {wait_after}s for content to expand")
                 await asyncio.sleep(wait_after)
                 logger.info(f"Successfully clicked {clicked} 'Show all' button(s)")

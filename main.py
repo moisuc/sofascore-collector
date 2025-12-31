@@ -1,5 +1,6 @@
 """Main entry point for SofaScore data collector."""
 
+import argparse
 import asyncio
 import logging
 
@@ -15,6 +16,38 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="SofaScore data collector - Live sports tracking and match collection"
+    )
+
+    parser.add_argument(
+        "--collect-upcoming",
+        type=int,
+        nargs="?",
+        const=7,
+        metavar="DAYS",
+        help="Collect upcoming matches for all sports (default: 7 days ahead if flag is set)",
+    )
+
+    parser.add_argument(
+        "--collect-schedule-past",
+        type=int,
+        metavar="DAYS",
+        help="Collect past matches in schedule window (requires --collect-schedule-future)",
+    )
+
+    parser.add_argument(
+        "--collect-schedule-future",
+        type=int,
+        metavar="DAYS",
+        help="Collect future matches in schedule window (requires --collect-schedule-past)",
+    )
+
+    return parser.parse_args()
+
+
 async def main():
     """
     Main function to run the SofaScore collector.
@@ -22,9 +55,13 @@ async def main():
     This function:
     1. Initializes the coordinator
     2. Starts live trackers for all configured sports
-    3. Runs until interrupted (Ctrl+C)
-    4. Performs graceful shutdown
+    3. Optionally collects upcoming matches (if --collect-upcoming is set)
+    4. Optionally collects schedule window (if --collect-schedule-* are set)
+    5. Runs until interrupted (Ctrl+C)
+    6. Performs graceful shutdown
     """
+    args = parse_args()
+
     logger.info("Starting SofaScore Collector")
     logger.info(f"Configured sports: {settings.sports}")
     logger.info(f"Headless mode: {settings.headless}")
@@ -35,23 +72,32 @@ async def main():
         # Start live trackers for all configured sports
         logger.info("Starting live trackers for all sports...")
         trackers = await coordinator.add_live_trackers_for_all_sports()
-    
+
         logger.info(f"Successfully started {len(trackers)} live trackers")
 
         # Optional: Collect upcoming matches for each sport
-        # Uncomment to enable:
-        # for sport in settings.sports:
-        #     await coordinator.collect_upcoming_matches(sport, days_ahead=7)
+        if args.collect_upcoming is not None:
+            logger.info(f"Collecting upcoming matches ({args.collect_upcoming} days ahead) for all sports...")
+            for sport in settings.sports:
+                await coordinator.collect_upcoming_matches(sport, days_ahead=args.collect_upcoming)
+            logger.info("Upcoming matches collection complete")
 
         # Optional: Collect schedule window (past + future) for all sports
-        # This collects historical and upcoming matches in a single operation
-        # Uncomment to enable:
-        # logger.info("Collecting schedule window for all sports...")
-        # await coordinator.collect_schedule_window_for_all_sports(
-        #     days_past=3,   # Past 3 days
-        #     days_future=3  # Future 3 days
-        # )
-        # logger.info("Schedule window collection complete")
+        if args.collect_schedule_past is not None and args.collect_schedule_future is not None:
+            logger.info(
+                f"Collecting schedule window for all sports "
+                f"({args.collect_schedule_past} days past, {args.collect_schedule_future} days future)..."
+            )
+            await coordinator.collect_schedule_window_for_all_sports(
+                days_past=args.collect_schedule_past,
+                days_future=args.collect_schedule_future
+            )
+            logger.info("Schedule window collection complete")
+        elif args.collect_schedule_past is not None or args.collect_schedule_future is not None:
+            logger.warning(
+                "Both --collect-schedule-past and --collect-schedule-future must be specified. "
+                "Skipping schedule window collection."
+            )
 
         # Show status
         status = coordinator.get_status()

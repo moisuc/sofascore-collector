@@ -1,7 +1,7 @@
 """Repository pattern for database CRUD operations."""
 
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, UTC
 from typing import Optional
 
 from sqlalchemy import select, and_, or_, desc, asc
@@ -55,7 +55,7 @@ class TeamRepository:
             for key, value in team_data.items():
                 if hasattr(team, key) and key not in ("id", "created_at"):
                     setattr(team, key, value)
-            team.updated_at = datetime.utcnow()
+            team.updated_at = datetime.now(UTC)
             logger.debug(f"Updated team: {team.name} (sofascore_id={sofascore_id})")
         else:
             # Create new team - filter to only valid fields
@@ -122,7 +122,7 @@ class LeagueRepository:
             for key, value in league_data.items():
                 if hasattr(league, key) and key not in ("id", "created_at"):
                     setattr(league, key, value)
-            league.updated_at = datetime.utcnow()
+            league.updated_at = datetime.now(UTC)
             logger.debug(f"Updated league: {league.name} (sofascore_id={sofascore_id})")
         else:
             # Create new league - filter to only valid fields
@@ -239,7 +239,7 @@ class MatchRepository:
             for key, value in match_data.items():
                 if hasattr(match, key) and key not in ("id", "created_at"):
                     setattr(match, key, value)
-            match.updated_at = datetime.utcnow()
+            match.updated_at = datetime.now(UTC)
             logger.debug(f"Updated match: {match.slug} (sofascore_id={sofascore_id})")
         else:
             # Create new match - filter to only valid fields
@@ -365,7 +365,7 @@ class MatchRepository:
         load_relations: bool = True,
     ) -> list[Match]:
         """Get upcoming scheduled matches."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         stmt = select(Match).where(
             and_(
@@ -497,7 +497,7 @@ class IncidentRepository:
             for key, value in incident_data.items():
                 if hasattr(incident, key) and key not in ("id", "created_at"):
                     setattr(incident, key, value)
-            incident.updated_at = datetime.utcnow()
+            incident.updated_at = datetime.now(UTC)
             logger.debug(f"Updated incident: {incident.incident_type}")
         else:
             # Create new incident

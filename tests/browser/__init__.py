@@ -1,1 +1,0 @@
-# Browser tests package

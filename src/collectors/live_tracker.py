@@ -193,6 +193,8 @@ class LiveTracker(BaseCollector):
 
                 logger.info(f"Refreshing live page for {self.sport}")
                 await self.page.reload(wait_until="networkidle", timeout=60000)
+                if settings.click_show_all:
+                    await self.click_show_all_buttons(wait_after=settings.show_all_wait_after)
                 logger.debug(f"Page refreshed successfully for {self.sport}")
 
             except asyncio.CancelledError:

@@ -1,1 +1,1 @@
-"""Tests for parsers module."""
+"""Parser tests module."""

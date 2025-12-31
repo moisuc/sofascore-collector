@@ -1,6 +1,6 @@
 """FastAPI application for SofaScore data API."""
 
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -77,7 +77,7 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
 
     return HealthResponse(
         status="healthy" if database_connected else "degraded",
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
         database_connected=database_connected,
     )
 

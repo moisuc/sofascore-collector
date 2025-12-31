@@ -160,6 +160,11 @@ class DailyEventsCollector(BaseCollector):
         if not self._consent_handled:
             self._consent_handled = await self.handle_consent_dialog(timeout=5.0)
 
+        # Click "Show all" buttons to expand all collapsed match lists
+        buttons_clicked = await self.click_show_all_buttons(wait_after=2.0)
+        if buttons_clicked > 0:
+            logger.info(f"Expanded {buttons_clicked} collapsed section(s) on {date_str}")
+
         # Wait for API responses to be intercepted
         await self.wait_for_data(timeout=5.0)
 

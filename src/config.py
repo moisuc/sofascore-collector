@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     # Browser settings
     headless: bool = True
+    enable_ws_interceptor: bool = True  # Enable/disable WebSocket interceptor
 
     # Database settings
     database_url: str = "sqlite:///data/sofascore.db"
@@ -34,7 +35,7 @@ class Settings(BaseSettings):
 
     # UI interaction
     click_show_all: bool = True  # Automatically click "Show all" buttons after page load
-    show_all_wait_after: float = 2.0  # Seconds to wait after clicking for content to expand
+    show_all_wait_after: float = 3.0  # Seconds to wait after clicking for content to expand
 
     # Memory Management
     max_db_sessions: int = 10  # Maximum database sessions in pool
