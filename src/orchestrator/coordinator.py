@@ -3,12 +3,14 @@
 import asyncio
 import logging
 import signal
+import time
 from typing import Any
 from datetime import date, timedelta
 
 from src.browser.manager import BrowserManager
 from src.collectors import LiveTracker, DailyEventsCollector
 from src.config import settings
+from src.memory.monitor import MemoryMonitor
 from src.orchestrator.handlers import DataHandler
 from src.storage.database import init_db
 
@@ -40,6 +42,11 @@ class CollectorCoordinator:
         self._running = False
         self._shutdown_event = asyncio.Event()
 
+        # Memory management
+        self.memory_monitor: MemoryMonitor | None = None
+        self._collector_start_times: dict[str, float] = {}  # Track collector start times
+        self._stopped_collectors: list[tuple[str, LiveTracker | DailyEventsCollector]] = []  # For restart
+
         logger.info("CollectorCoordinator initialized")
 
     async def initialize(self) -> None:
@@ -50,6 +57,7 @@ class CollectorCoordinator:
         - Database
         - Browser manager
         - Data handler
+        - Memory monitor
         """
         logger.info("Initializing coordinator resources...")
 
@@ -65,6 +73,21 @@ class CollectorCoordinator:
         # Create data handler (creates session per operation for SQLite safety)
         self.handler = DataHandler()
         logger.info("Data handler initialized")
+
+        # Initialize memory monitor
+        self.memory_monitor = MemoryMonitor(
+            check_interval=settings.memory_check_interval,
+            threshold_mb=settings.memory_limit_mb,
+            on_high_memory=self._handle_high_memory
+        )
+        await self.memory_monitor.start()
+        logger.info("Memory monitor started")
+
+        # Schedule periodic browser cache cleanup
+        await self.browser_manager.schedule_periodic_cleanup(
+            interval=settings.chrome_cleanup_interval
+        )
+        logger.info(f"Scheduled browser cleanup (interval: {settings.chrome_cleanup_interval}s)")
 
         self._running = True
         logger.info("Coordinator initialization complete")
@@ -94,7 +117,9 @@ class CollectorCoordinator:
 
         if collector_id in self.collectors:
             logger.warning(f"Live tracker for {sport} already exists")
-            return self.collectors[collector_id]
+            collector = self.collectors[collector_id]
+            assert isinstance(collector, LiveTracker)
+            return collector
 
         logger.info(f"Adding live tracker for {sport}")
 
@@ -114,6 +139,7 @@ class CollectorCoordinator:
 
         if auto_start:
             await tracker.start()
+            self._collector_start_times[collector_id] = time.time()
             logger.info(f"Live tracker for {sport} started")
 
         return tracker
@@ -152,7 +178,9 @@ class CollectorCoordinator:
 
         if collector_id in self.collectors:
             logger.warning(f"Daily collector for {sport} ({start} to {end}) already exists")
-            return self.collectors[collector_id]
+            collector = self.collectors[collector_id]
+            assert isinstance(collector, DailyEventsCollector)
+            return collector
 
         logger.info(f"Adding daily collector for {sport} ({start} to {end})")
 
@@ -170,6 +198,7 @@ class CollectorCoordinator:
 
         if auto_start:
             await collector.start()
+            self._collector_start_times[collector_id] = time.time()
             logger.info(f"Daily collector for {sport} started")
 
         return collector
@@ -409,6 +438,14 @@ class CollectorCoordinator:
         """Cleanup all resources."""
         logger.info("Cleaning up coordinator resources...")
 
+        # Stop memory monitor
+        if self.memory_monitor:
+            try:
+                await self.memory_monitor.stop()
+                logger.info("Memory monitor stopped")
+            except Exception as e:
+                logger.error(f"Error stopping memory monitor: {e}", exc_info=True)
+
         # Stop all collectors
         await self.stop_all_collectors()
 
@@ -422,6 +459,182 @@ class CollectorCoordinator:
 
         self._running = False
         logger.info("Coordinator cleanup complete")
+
+    async def _handle_high_memory(self) -> None:
+        """
+        Handle high memory situation.
+
+        Recovery process:
+        1. Clear browser cache
+        2. Wait and re-check memory
+        3. If still high, stop oldest collector
+        4. Wait for memory to drop below target (50%)
+        5. Restart collectors or trigger emergency shutdown
+        """
+        logger.warning("High memory detected, starting recovery process")
+
+        if not self.browser_manager or not self.memory_monitor:
+            logger.error("Cannot handle high memory: missing browser manager or monitor")
+            return
+
+        # Step 1: Clear browser cache (preserve cookies)
+        logger.info("Clearing browser cache to free memory...")
+        await self.browser_manager.clear_browser_cache(preserve_cookies=True)
+
+        # Step 2: Wait and re-check
+        await asyncio.sleep(5)
+        usage = self.memory_monitor.get_current_usage()
+        logger.info(
+            f"Memory after cache clear: {usage['system_percent']}% "
+            f"({usage['system_used_mb']:.0f} MB)"
+        )
+
+        if not usage["threshold_exceeded"]:
+            logger.info("Memory recovered after cache clear")
+            return
+
+        # Step 3: Stop collectors one by one (oldest first) until memory drops
+        logger.warning("Cache clear insufficient, stopping collectors...")
+
+        while usage["threshold_exceeded"] and self.collectors:
+            # Stop oldest collector
+            stopped_collector = await self._stop_oldest_collectors(count=1)
+
+            if not stopped_collector:
+                logger.error("No more collectors to stop")
+                break
+
+            # Wait for memory to drop below target
+            recovered = await self._wait_for_memory_drop(
+                target_percent=settings.memory_target_percent,
+                timeout_seconds=60
+            )
+
+            if recovered:
+                logger.info("Memory recovered after stopping collectors")
+                # Restart stopped collectors
+                await self._restart_collectors()
+                return
+
+            # Re-check memory for next iteration
+            usage = self.memory_monitor.get_current_usage()
+
+        # Step 4: If we've stopped all collectors and memory is still high, emergency shutdown
+        if usage["threshold_exceeded"]:
+            logger.critical("Memory still high after stopping all collectors, triggering shutdown")
+            await self._emergency_shutdown()
+        else:
+            logger.info("Memory recovered, restarting collectors")
+            await self._restart_collectors()
+
+    async def _stop_oldest_collectors(self, count: int = 1) -> list[str]:
+        """
+        Stop the oldest N collectors.
+
+        Args:
+            count: Number of collectors to stop
+
+        Returns:
+            List of stopped collector IDs
+        """
+        if not self._collector_start_times:
+            logger.warning("No running collectors to stop")
+            return []
+
+        # Sort collectors by start time (oldest first)
+        sorted_collectors = sorted(
+            self._collector_start_times.items(),
+            key=lambda x: x[1]
+        )
+
+        stopped = []
+        for collector_id, start_time in sorted_collectors[:count]:
+            if collector_id in self.collectors:
+                collector = self.collectors[collector_id]
+
+                logger.info(f"Stopping collector '{collector_id}' (running for {time.time() - start_time:.0f}s)")
+
+                try:
+                    await collector.stop()
+
+                    # Track for restart
+                    self._stopped_collectors.append((collector_id, collector))
+
+                    # Remove from active tracking
+                    del self._collector_start_times[collector_id]
+
+                    stopped.append(collector_id)
+                    logger.info(f"Collector '{collector_id}' stopped")
+
+                except Exception as e:
+                    logger.error(f"Error stopping collector '{collector_id}': {e}", exc_info=True)
+
+        return stopped
+
+    async def _wait_for_memory_drop(
+        self,
+        target_percent: float = 0.5,
+        timeout_seconds: int = 60
+    ) -> bool:
+        """
+        Wait for memory usage to drop below target.
+
+        Args:
+            target_percent: Target memory usage (0.0-1.0)
+            timeout_seconds: Maximum wait time
+
+        Returns:
+            True if memory dropped below target, False if timeout
+        """
+        if not self.memory_monitor:
+            return False
+
+        logger.info(f"Waiting for memory to drop below {target_percent*100}%...")
+
+        start_time = time.time()
+        while time.time() - start_time < timeout_seconds:
+            usage = self.memory_monitor.get_current_usage()
+            current_percent = usage["system_percent"] / 100.0
+
+            logger.debug(
+                f"Memory check: {usage['system_percent']}% "
+                f"(target: {target_percent*100}%)"
+            )
+
+            if current_percent < target_percent:
+                logger.info(f"Memory dropped to {usage['system_percent']}%")
+                return True
+
+            await asyncio.sleep(2)
+
+        logger.warning(f"Memory did not drop below target after {timeout_seconds}s")
+        return False
+
+    async def _restart_collectors(self) -> None:
+        """Restart previously stopped collectors."""
+        if not self._stopped_collectors:
+            logger.info("No collectors to restart")
+            return
+
+        logger.info(f"Restarting {len(self._stopped_collectors)} stopped collectors...")
+
+        for collector_id, collector in self._stopped_collectors:
+            try:
+                logger.info(f"Restarting collector '{collector_id}'")
+                await collector.start()
+                self._collector_start_times[collector_id] = time.time()
+                logger.info(f"Collector '{collector_id}' restarted")
+            except Exception as e:
+                logger.error(f"Error restarting collector '{collector_id}': {e}", exc_info=True)
+
+        # Clear stopped collectors list
+        self._stopped_collectors.clear()
+        logger.info("All collectors restarted")
+
+    async def _emergency_shutdown(self) -> None:
+        """Trigger emergency shutdown due to persistent high memory."""
+        logger.critical("Triggering emergency shutdown due to persistent high memory")
+        self._shutdown_event.set()
 
     def get_status(self) -> dict[str, Any]:
         """

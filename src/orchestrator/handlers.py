@@ -50,7 +50,7 @@ class DataHandler:
             return self.session
         return get_session()
 
-    def _close_session_if_needed(self, session: Session) -> None:
+    def _close_session_if_needed(self, session: Session | None) -> None:
         """Close session if we created it."""
         if self._should_close_session and session:
             session.close()
@@ -67,7 +67,7 @@ class DataHandler:
         """
         session = None
         try:
-            sport = match.group(1) if match.lastindex >= 1 else "unknown"
+            sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
 
             # Parse events using existing parser
             parsed_events = parse_live_events(data)
@@ -195,8 +195,8 @@ class DataHandler:
         """
         session = None
         try:
-            sport = match.group(1) if match.lastindex >= 1 else "unknown"
-            date_str = match.group(2) if match.lastindex >= 2 else "unknown"
+            sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
+            date_str = match.group(2) if match.lastindex and match.lastindex >= 2 else "unknown"
 
             # Parse events using existing parser
             parsed_events = parse_scheduled_events(data)
@@ -326,7 +326,7 @@ class DataHandler:
         """
         session = None
         try:
-            sport = match.group(1) if match.lastindex >= 1 else "unknown"
+            sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
 
             # Parse events using parser
             parsed_events = parse_featured_events(data)
@@ -453,8 +453,8 @@ class DataHandler:
         """
         session = None
         try:
-            sport = match.group(1) if match.lastindex >= 1 else "unknown"
-            date_str = match.group(2) if match.lastindex >= 2 else "unknown"
+            sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
+            date_str = match.group(2) if match.lastindex and match.lastindex >= 2 else "unknown"
 
             # Parse events using parser
             parsed_events = parse_inverse_events(data)

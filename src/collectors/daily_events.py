@@ -182,8 +182,8 @@ class DailyEventsCollector(BaseCollector):
         """
         try:
             # Extract sport and date from URL
-            sport_from_url = match.group(1) if match.lastindex >= 1 else None
-            date_from_url = match.group(2) if match.lastindex >= 2 else None
+            sport_from_url = match.group(1) if match.lastindex and match.lastindex >= 1 else None
+            date_from_url = match.group(2) if match.lastindex and match.lastindex >= 2 else None
 
             # Verify this is our sport
             if sport_from_url and sport_from_url != self.sport:

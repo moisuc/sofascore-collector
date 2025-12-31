@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.128.0",
     "httpx>=0.28.1",
     "playwright>=1.57.0",
+    "psutil>=6.1.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
     "redis>=7.1.0",
@@ -21,14 +22,13 @@ dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "ruff>=0.14.10",
-    "ty>=0.6.1",
+    "ty<=0.0.8",
 ]
 
 [tool.ty]
-# Python version
+# Environment configuration
+[tool.ty.environment]
 python-version = "3.14"
-
-# Project root paths for finding first-party modules
 root = ["."]
 
 # Rule configuration (error, warn, or ignore)

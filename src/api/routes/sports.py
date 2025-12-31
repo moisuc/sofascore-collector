@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
 from src.models.schemas import League, MatchWithRelations, Sport
+from src.storage.database import Match, League as LeagueModel
 from src.storage.repositories import LeagueRepository, MatchRepository
 
 router = APIRouter()
@@ -27,7 +28,7 @@ def get_sports() -> list[str]:
 def get_today_matches(
     sport: Sport,
     db: Session = Depends(get_db),
-) -> list[MatchWithRelations]:
+) -> list[Match]:
     """
     Get today's matches for a specific sport.
 
@@ -53,7 +54,7 @@ def get_upcoming_matches(
     sport: Sport,
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     db: Session = Depends(get_db),
-) -> list[MatchWithRelations]:
+) -> list[Match]:
     """
     Get upcoming scheduled matches for a specific sport.
 
@@ -79,7 +80,7 @@ def get_finished_matches(
     sport: Sport,
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     db: Session = Depends(get_db),
-) -> list[MatchWithRelations]:
+) -> list[Match]:
     """
     Get recent finished matches for a specific sport.
 
@@ -106,7 +107,7 @@ def get_sport_leagues(
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
     db: Session = Depends(get_db),
-) -> list[League]:
+) -> list[LeagueModel]:
     """
     Get leagues/tournaments for a specific sport.
 

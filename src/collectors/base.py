@@ -188,7 +188,7 @@ class BaseCollector(ABC):
         # Navigate
         logger.info(f"Navigating to: {url}")
         try:
-            await self.page.goto(url, wait_until=wait_until, timeout=60000)
+            await self.page.goto(url, wait_until=wait_until, timeout=60000)  # type: ignore[arg-type]
             logger.debug(f"Navigation complete: {url}")
         except Exception as e:
             logger.error(f"Navigation failed for {url}: {e}")

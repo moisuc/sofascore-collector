@@ -64,9 +64,9 @@ class WebSocketInterceptor:
         # Register event handlers for this WebSocket
         ws.on("framereceived", lambda payload: self._on_frame_received(ws, payload))
         ws.on("framesent", lambda payload: self._on_frame_sent(ws, payload))
-        ws.on("close", lambda: self._on_close(ws))
+        ws.on("close", lambda _ws: self._on_close(ws))
 
-    def _on_frame_sent(self, ws: WebSocket, payload: dict) -> None:
+    def _on_frame_sent(self, ws: WebSocket, payload: str | bytes) -> None:
         """
         Handle outgoing WebSocket frame.
 
@@ -79,7 +79,7 @@ class WebSocketInterceptor:
         except Exception as e:
             logger.error(f"Error logging sent frame: {e}")
 
-    def _on_frame_received(self, ws: WebSocket, payload: dict) -> None:
+    def _on_frame_received(self, ws: WebSocket, payload: str | bytes) -> None:
         """
         Handle incoming WebSocket frame.
 

@@ -110,11 +110,11 @@ class LiveTracker(BaseCollector):
             # Use LiveScoreWebSocketInterceptor if we have score/incident handlers
             if hasattr(self.ws_interceptor, "on_score_update"):
                 if self.on_score_update:
-                    self.ws_interceptor.on_score_update(self.on_score_update)
+                    self.ws_interceptor.on_score_update(self.on_score_update)  # type: ignore[misc]
                     logger.debug(f"Registered score update handler for {self.sport}")
 
                 if self.on_incident:
-                    self.ws_interceptor.on_incident(self.on_incident)
+                    self.ws_interceptor.on_incident(self.on_incident)  # type: ignore[misc]
                     logger.debug(f"Registered incident handler for {self.sport}")
             else:
                 # Fallback to generic message handler
@@ -213,7 +213,7 @@ class LiveTracker(BaseCollector):
             match: Regex match object containing URL groups
         """
         try:
-            sport_from_url = match.group(1) if match.lastindex >= 1 else None
+            sport_from_url = match.group(1) if match.lastindex and match.lastindex >= 1 else None
 
             # Verify this is our sport
             if sport_from_url and sport_from_url != self.sport:
@@ -245,7 +245,7 @@ class LiveTracker(BaseCollector):
             match: Regex match object containing URL groups
         """
         try:
-            sport_from_url = match.group(1) if match.lastindex >= 1 else None
+            sport_from_url = match.group(1) if match.lastindex and match.lastindex >= 1 else None
 
             # Verify this is our sport
             if sport_from_url and sport_from_url != self.sport:
@@ -277,7 +277,7 @@ class LiveTracker(BaseCollector):
             match: Regex match object containing URL groups
         """
         try:
-            sport_from_url = match.group(1) if match.lastindex >= 1 else None
+            sport_from_url = match.group(1) if match.lastindex and match.lastindex >= 1 else None
 
             # Verify this is our sport
             if sport_from_url and sport_from_url != self.sport:
@@ -309,7 +309,7 @@ class LiveTracker(BaseCollector):
             match: Regex match object containing URL groups
         """
         try:
-            sport_from_url = match.group(1) if match.lastindex >= 1 else None
+            sport_from_url = match.group(1) if match.lastindex and match.lastindex >= 1 else None
 
             # Verify this is our sport
             if sport_from_url and sport_from_url != self.sport:

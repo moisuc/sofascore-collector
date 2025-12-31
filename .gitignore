@@ -100,10 +100,10 @@ venv.bak/
 # Spyder project settings
 .spyderproject
 .spyproject
-
+memory_metrics.json
 # Rope project settings
 .ropeproject
-
+uv.lock
 # mkdocs documentation
 /site
 

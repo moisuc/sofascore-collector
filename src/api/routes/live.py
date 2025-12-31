@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
 from src.models.schemas import MatchWithRelations, Sport
+from src.storage.database import Match
 from src.storage.repositories import MatchRepository
 
 router = APIRouter()
@@ -14,7 +15,7 @@ router = APIRouter()
 def get_all_live_matches(
     sport: Sport | None = Query(None, description="Filter by sport"),
     db: Session = Depends(get_db),
-) -> list[MatchWithRelations]:
+) -> list[Match]:
     """
     Get all live matches across all sports or filtered by sport.
 
@@ -34,7 +35,7 @@ def get_all_live_matches(
 def get_live_matches_by_sport(
     sport: Sport,
     db: Session = Depends(get_db),
-) -> list[MatchWithRelations]:
+) -> list[Match]:
     """
     Get live matches for a specific sport.
 

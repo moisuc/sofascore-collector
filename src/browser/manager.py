@@ -33,6 +33,7 @@ class BrowserManager:
         self.browser: Browser | None = None
         self.contexts: dict[str, BrowserContext] = {}
         self._refresh_tasks: dict[str, asyncio.Task] = {}
+        self._cleanup_task: asyncio.Task | None = None  # Periodic cleanup task
 
     async def start(self) -> None:
         """Start Playwright and launch browser."""
@@ -182,9 +183,104 @@ class BrowserManager:
             del self.contexts[name]
             logger.info(f"Context '{name}' closed")
 
+    async def clear_browser_cache(self, preserve_cookies: bool = True) -> None:
+        """
+        Clear browser cache for all contexts.
+
+        Note: Playwright doesn't expose direct cache clearing APIs.
+        This implementation clears storage except cookies to preserve sessions.
+
+        Args:
+            preserve_cookies: If True, preserve cookies to maintain sessions
+        """
+        logger.info(f"Clearing browser cache (preserve_cookies={preserve_cookies})")
+
+        for context_name, context in list(self.contexts.items()):
+            try:
+                # Get all pages in context
+                pages = context.pages
+
+                if pages:
+                    for page in pages:
+                        try:
+                            # Clear storage via JavaScript (preserves cookies if requested)
+                            if preserve_cookies:
+                                # Clear only localStorage and sessionStorage
+                                await page.evaluate("""
+                                    () => {
+                                        localStorage.clear();
+                                        sessionStorage.clear();
+                                    }
+                                """)
+                            else:
+                                # Clear everything including cookies
+                                await page.evaluate("""
+                                    () => {
+                                        localStorage.clear();
+                                        sessionStorage.clear();
+                                    }
+                                """)
+                                await context.clear_cookies()
+
+                            logger.debug(f"Cleared cache for page in context '{context_name}'")
+
+                        except Exception as e:
+                            logger.warning(f"Error clearing cache for page: {e}")
+
+                else:
+                    logger.debug(f"No pages in context '{context_name}' to clear cache")
+
+            except Exception as e:
+                logger.error(f"Error clearing cache for context '{context_name}': {e}")
+
+        # Force garbage collection
+        import gc
+        collected = gc.collect()
+        logger.debug(f"Garbage collection freed {collected} objects")
+
+        logger.info("Browser cache clearing complete")
+
+    async def schedule_periodic_cleanup(self, interval: int = 3600) -> None:
+        """
+        Schedule periodic browser cache cleanup.
+
+        Args:
+            interval: Cleanup interval in seconds (default: 1 hour)
+        """
+        if self._cleanup_task:
+            logger.warning("Periodic cleanup already scheduled")
+            return
+
+        async def cleanup_loop():
+            while True:
+                try:
+                    await asyncio.sleep(interval)
+                    logger.info("Running scheduled browser cache cleanup")
+                    await self.clear_browser_cache(preserve_cookies=True)
+                except Exception as e:
+                    logger.error(f"Error in periodic cleanup: {e}", exc_info=True)
+                    break
+
+        self._cleanup_task = asyncio.create_task(cleanup_loop())
+        logger.info(f"Scheduled periodic browser cleanup (interval: {interval}s)")
+
+    async def stop_periodic_cleanup(self) -> None:
+        """Stop periodic browser cache cleanup."""
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
+            logger.info("Stopped periodic browser cleanup")
+
     async def shutdown(self) -> None:
         """Shutdown all contexts and browser."""
         logger.info("Shutting down browser manager...")
+
+        # Stop periodic cleanup task
+        await self.stop_periodic_cleanup()
 
         # Stop all refresh tasks
         for task_key in list(self._refresh_tasks.keys()):

@@ -23,7 +23,7 @@ router = APIRouter()
 def get_match_statistics(
     match_id: int,
     db: Session = Depends(get_db),
-) -> list[MatchStatistic]:
+) -> list[MatchStatisticModel]:
     """
     Get all statistics for a specific match.
 
@@ -52,7 +52,7 @@ def get_match_statistics(
 def get_match_incidents(
     match_id: int,
     db: Session = Depends(get_db),
-) -> list[Incident]:
+) -> list[IncidentModel]:
     """
     Get all incidents (goals, cards, substitutions) for a specific match.
 

@@ -26,7 +26,7 @@ def get_matches(
     limit: int = Query(50, ge=1, le=500, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
     db: Session = Depends(get_db),
-) -> list[MatchWithRelations]:
+) -> list[Match]:
     """
     Get matches with flexible filtering.
 
@@ -91,7 +91,7 @@ def get_matches(
 def get_match_details(
     match_id: int,
     db: Session = Depends(get_db),
-) -> MatchDetail:
+) -> Match | None:
     """
     Get detailed match information including statistics and incidents.
 

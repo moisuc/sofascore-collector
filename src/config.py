@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     memory_warning_threshold: float = 0.8  # Warn at 80% memory usage
     memory_critical_threshold: float = 0.95  # Critical at 95% memory usage
 
+    # Memory Management (new)
+    memory_check_interval: float = 30.0  # Check memory every N seconds
+    memory_limit_mb: int = 4096  # Memory threshold in MB (triggers cleanup at 90%)
+    memory_target_percent: float = 0.5  # Target 50% usage after cleanup
+    chrome_cleanup_interval: int = 3600  # Chrome cleanup interval (1 hour)
+    memory_metrics_file: str = "data/memory_metrics.json"  # Metrics file path
+
 
 # Global settings instance
 settings = Settings()
