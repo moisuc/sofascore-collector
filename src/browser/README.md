@@ -21,7 +21,7 @@ async with BrowserManager(headless=True) as browser:
     # Start periodic refresh
     await browser.refresh_page_periodically(page, interval=300)
 
-    await page.goto('https://www.sofascore.com/football/livescore')
+    await page.goto('https://www.sofascore.com/football')
 ```
 
 ### ResponseInterceptor ([interceptor.py](interceptor.py))
@@ -90,7 +90,7 @@ async def main():
         ws_interceptor.on_message(my_ws_handler)
 
         # Navigate and collect
-        await page.goto('https://www.sofascore.com/football/livescore')
+        await page.goto('https://www.sofascore.com/football')
 
         # Keep running
         await asyncio.sleep(3600)  # 1 hour

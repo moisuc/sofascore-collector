@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SofaScore Events Dashboard</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>SofaScore Events Dashboard</h1>
+            <div class="auto-refresh">
+                <label>
+                    <input type="checkbox" id="autoRefresh" checked>
+                    Auto-refresh (30s)
+                </label>
+            </div>
+        </header>
+
+        <!-- Sport Tabs -->
+        <div class="sport-tabs">
+            <button class="sport-tab active" data-sport="football">Football</button>
+            <button class="sport-tab" data-sport="tennis">Tennis</button>
+            <button class="sport-tab" data-sport="basketball">Basketball</button>
+            <button class="sport-tab" data-sport="handball">Handball</button>
+            <button class="sport-tab" data-sport="volleyball">Volleyball</button>
+        </div>
+
+        <!-- Date Navigation -->
+        <div class="date-navigation">
+            <button id="prevDay" class="nav-button">←</button>
+            <div id="currentDate" class="current-date"></div>
+            <button id="nextDay" class="nav-button">→</button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading" class="loading">Loading matches...</div>
+
+        <!-- Error Message -->
+        <div id="error" class="error" style="display: none;"></div>
+
+        <!-- Matches Container -->
+        <div id="matchesContainer" class="matches-container"></div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <p>No matches found for this date.</p>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

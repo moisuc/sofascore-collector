@@ -74,6 +74,7 @@ class DailyEventsCollector(BaseCollector):
         # Calculate total days to process
         self.total_days = (self.end_date - self.start_date).days + 1
         self.processed_days = 0
+        self._consent_handled = False  # Track if consent dialog was handled
 
         logger.info(
             f"DailyEventsCollector initialized for {sport}: "
@@ -154,6 +155,10 @@ class DailyEventsCollector(BaseCollector):
 
         # Navigate to date page
         await self.navigate_with_delay(url, wait_until="networkidle")
+
+        # Handle consent dialog on first navigation only
+        if not self._consent_handled:
+            self._consent_handled = await self.handle_consent_dialog(timeout=5.0)
 
         # Wait for API responses to be intercepted
         await self.wait_for_data(timeout=5.0)

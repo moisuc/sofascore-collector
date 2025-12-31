@@ -242,7 +242,7 @@ async def create_ws_interceptor(
     Example:
         ws_interceptor = await create_ws_interceptor(page, live_score_mode=True)
         ws_interceptor.on_score_update(my_score_handler)
-        await page.goto('https://www.sofascore.com/football/livescore')
+        await page.goto('https://www.sofascore.com/football')
     """
     if live_score_mode:
         interceptor = LiveScoreWebSocketInterceptor()

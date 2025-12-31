@@ -104,6 +104,8 @@ class CollectorCoordinator:
             sport=sport,
             on_live_data=self.handler.handle_live_events,
             on_scheduled_data=self.handler.handle_scheduled_events,
+            on_featured_data=self.handler.handle_featured_events,
+            on_inverse_data=self.handler.handle_inverse_events,
             on_score_update=self.handler.handle_score_update,
             on_incident=self.handler.handle_incident,
         )

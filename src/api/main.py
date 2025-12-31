@@ -1,9 +1,12 @@
 """FastAPI application for SofaScore data API."""
 
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
@@ -47,6 +50,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files
+STATIC_DIR = Path(__file__).parent.parent.parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # Health check endpoint
@@ -95,4 +103,20 @@ async def root():
         "version": API_VERSION,
         "docs": "/docs",
         "health": "/health",
+        "dashboard": "/dashboard",
     }
+
+
+# Dashboard endpoint
+@app.get("/dashboard", tags=["System"])
+async def dashboard():
+    """
+    Serve the web dashboard.
+
+    Returns:
+        HTML: Dashboard interface
+    """
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return {"error": "Dashboard not found"}

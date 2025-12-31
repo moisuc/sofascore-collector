@@ -2,11 +2,15 @@
 
 import logging
 import re
-from typing import Any
 
 from sqlalchemy.orm import Session
 
-from src.parsers.api_response import parse_live_events, parse_scheduled_events
+from src.parsers.api_response import (
+    parse_live_events,
+    parse_scheduled_events,
+    parse_featured_events,
+    parse_inverse_events,
+)
 from src.parsers.ws_message import parse_score_update, parse_incident
 from src.storage.database import get_session, MatchStatus
 from src.storage.repositories import (
@@ -310,6 +314,265 @@ class DataHandler:
         finally:
             self._close_session_if_needed(session)
 
+    async def handle_featured_events(self, data: dict, match: re.Match) -> None:
+        """
+        Handle featured events HTTP response.
+
+        Parses featured match data from odds endpoint and stores to database.
+
+        Args:
+            data: JSON response data from /api/v1/odds/{id}/featured-events/{sport}
+            match: Regex match object containing URL groups
+        """
+        session = None
+        try:
+            sport = match.group(1) if match.lastindex >= 1 else "unknown"
+
+            # Parse events using parser
+            parsed_events = parse_featured_events(data)
+
+            if not parsed_events:
+                logger.debug(f"No featured events to process for {sport}")
+                return
+
+            logger.info(f"Processing {len(parsed_events)} featured events for {sport}")
+
+            # Get database session
+            session = self._get_session()
+
+            # Initialize repositories
+            team_repo = TeamRepository(session)
+            league_repo = LeagueRepository(session)
+            match_repo = MatchRepository(session)
+
+            # Process each event (same logic as live events)
+            processed_count = 0
+            for event in parsed_events:
+                try:
+                    # Skip events with parsing errors
+                    if "error" in event:
+                        logger.warning(f"Skipping event with parse error: {event.get('error')}")
+                        continue
+
+                    # Upsert home team
+                    if "home_team" in event:
+                        home_team = team_repo.upsert(event["home_team"])
+                        session.flush()
+                    else:
+                        logger.warning(f"Event {event.get('sofascore_id')} missing home team")
+                        continue
+
+                    # Upsert away team
+                    if "away_team" in event:
+                        away_team = team_repo.upsert(event["away_team"])
+                        session.flush()
+                    else:
+                        logger.warning(f"Event {event.get('sofascore_id')} missing away team")
+                        continue
+
+                    # Upsert league/tournament
+                    league = None
+                    if "tournament" in event:
+                        league = league_repo.upsert(event["tournament"])
+                        session.flush()
+
+                    # Prepare match data
+                    match_data = {
+                        "sofascore_id": event["sofascore_id"],
+                        "slug": event.get("slug", f"match-{event['sofascore_id']}"),
+                        "custom_id": event.get("custom_id"),
+                        "sport": event.get("sport", sport),
+                        "home_team_id": home_team.id,
+                        "away_team_id": away_team.id,
+                        "league_id": league.id if league else None,
+                        "status": self._map_status_code(event.get("status_code", 0)),
+                        "status_code": event.get("status_code", 0),
+                        "home_score_current": event.get("home_score_current", 0),
+                        "away_score_current": event.get("away_score_current", 0),
+                        "start_timestamp": event["start_timestamp"],
+                        "start_time": event["start_time"],
+                        "season_name": event.get("season_name"),
+                        "season_year": event.get("season_year"),
+                        "round": event.get("round"),
+                        "winner_code": event.get("winner_code", 0),
+                        "has_xg": event.get("has_xg", False),
+                        "has_highlights": event.get("has_highlights", False),
+                        "has_player_statistics": event.get("has_player_statistics", False),
+                        "has_heatmap": event.get("has_heatmap", False),
+                    }
+
+                    # Add score details if available
+                    if "home_score" in event:
+                        match_data.update({
+                            "home_score_period1": event["home_score"].get("period1"),
+                            "home_score_period2": event["home_score"].get("period2"),
+                            "home_score_overtime": event["home_score"].get("overtime"),
+                            "home_score_penalties": event["home_score"].get("penalties"),
+                        })
+
+                    if "away_score" in event:
+                        match_data.update({
+                            "away_score_period1": event["away_score"].get("period1"),
+                            "away_score_period2": event["away_score"].get("period2"),
+                            "away_score_overtime": event["away_score"].get("overtime"),
+                            "away_score_penalties": event["away_score"].get("penalties"),
+                        })
+
+                    # Upsert match
+                    match_repo.upsert(match_data)
+                    processed_count += 1
+
+                except Exception as e:
+                    logger.error(
+                        f"Error processing featured event {event.get('sofascore_id')}: {e}",
+                        exc_info=True
+                    )
+                    # Continue processing other events
+                    continue
+
+            # Commit transaction
+            session.commit()
+            logger.info(f"Successfully processed {processed_count}/{len(parsed_events)} featured events for {sport}")
+
+        except Exception as e:
+            logger.error(f"Error handling featured events: {e}", exc_info=True)
+            if session:
+                session.rollback()
+        finally:
+            self._close_session_if_needed(session)
+
+    async def handle_inverse_events(self, data: dict, match: re.Match) -> None:
+        """
+        Handle inverse scheduled events HTTP response.
+
+        Parses inverse scheduled match data and stores to database with is_inverse flag.
+
+        Args:
+            data: JSON response data from /api/v1/sport/{sport}/scheduled-events/{date}/inverse
+            match: Regex match object containing URL groups (sport, date)
+        """
+        session = None
+        try:
+            sport = match.group(1) if match.lastindex >= 1 else "unknown"
+            date_str = match.group(2) if match.lastindex >= 2 else "unknown"
+
+            # Parse events using parser
+            parsed_events = parse_inverse_events(data)
+
+            if not parsed_events:
+                logger.debug(f"No inverse events to process for {sport} on {date_str}")
+                return
+
+            logger.info(f"Processing {len(parsed_events)} inverse events for {sport} on {date_str}")
+
+            # Get database session
+            session = self._get_session()
+
+            # Initialize repositories
+            team_repo = TeamRepository(session)
+            league_repo = LeagueRepository(session)
+            match_repo = MatchRepository(session)
+
+            # Process each event
+            processed_count = 0
+            for event in parsed_events:
+                try:
+                    # Skip events with parsing errors
+                    if "error" in event:
+                        logger.warning(f"Skipping event with parse error: {event.get('error')}")
+                        continue
+
+                    # Upsert home team
+                    if "home_team" in event:
+                        home_team = team_repo.upsert(event["home_team"])
+                        session.flush()
+                    else:
+                        logger.warning(f"Event {event.get('sofascore_id')} missing home team")
+                        continue
+
+                    # Upsert away team
+                    if "away_team" in event:
+                        away_team = team_repo.upsert(event["away_team"])
+                        session.flush()
+                    else:
+                        logger.warning(f"Event {event.get('sofascore_id')} missing away team")
+                        continue
+
+                    # Upsert league/tournament
+                    league = None
+                    if "tournament" in event:
+                        league = league_repo.upsert(event["tournament"])
+                        session.flush()
+
+                    # Prepare match data with is_inverse=True
+                    match_data = {
+                        "sofascore_id": event["sofascore_id"],
+                        "slug": event.get("slug", f"match-{event['sofascore_id']}"),
+                        "custom_id": event.get("custom_id"),
+                        "sport": event.get("sport", sport),
+                        "home_team_id": home_team.id,
+                        "away_team_id": away_team.id,
+                        "league_id": league.id if league else None,
+                        "status": self._map_status_code(event.get("status_code", 0)),
+                        "status_code": event.get("status_code", 0),
+                        "home_score_current": event.get("home_score_current", 0),
+                        "away_score_current": event.get("away_score_current", 0),
+                        "start_timestamp": event["start_timestamp"],
+                        "start_time": event["start_time"],
+                        "season_name": event.get("season_name"),
+                        "season_year": event.get("season_year"),
+                        "round": event.get("round"),
+                        "winner_code": event.get("winner_code", 0),
+                        "has_xg": event.get("has_xg", False),
+                        "has_highlights": event.get("has_highlights", False),
+                        "has_player_statistics": event.get("has_player_statistics", False),
+                        "has_heatmap": event.get("has_heatmap", False),
+                        "is_inverse": True,  # Mark as inverse event
+                    }
+
+                    # Add score details if available
+                    if "home_score" in event:
+                        match_data.update({
+                            "home_score_period1": event["home_score"].get("period1"),
+                            "home_score_period2": event["home_score"].get("period2"),
+                            "home_score_overtime": event["home_score"].get("overtime"),
+                            "home_score_penalties": event["home_score"].get("penalties"),
+                        })
+
+                    if "away_score" in event:
+                        match_data.update({
+                            "away_score_period1": event["away_score"].get("period1"),
+                            "away_score_period2": event["away_score"].get("period2"),
+                            "away_score_overtime": event["away_score"].get("overtime"),
+                            "away_score_penalties": event["away_score"].get("penalties"),
+                        })
+
+                    # Upsert match
+                    match_repo.upsert(match_data)
+                    processed_count += 1
+
+                except Exception as e:
+                    logger.error(
+                        f"Error processing inverse event {event.get('sofascore_id')}: {e}",
+                        exc_info=True
+                    )
+                    # Continue processing other events
+                    continue
+
+            # Commit transaction
+            session.commit()
+            logger.info(
+                f"Successfully processed {processed_count}/{len(parsed_events)} "
+                f"inverse events for {sport} on {date_str}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error handling inverse events: {e}", exc_info=True)
+            if session:
+                session.rollback()
+        finally:
+            self._close_session_if_needed(session)
+
     async def handle_score_update(self, data: dict) -> None:
         """
         Handle WebSocket score update.
@@ -473,7 +736,8 @@ class DataHandler:
         # Common status codes from SofaScore
         status_map = {
             0: MatchStatus.SCHEDULED,
-            6: MatchStatus.SCHEDULED,  # Not started
+            6: MatchStatus.LIVE,  # Not started
+            7:MatchStatus.LIVE,
             17: MatchStatus.LIVE,  # 1st period
             31: MatchStatus.LIVE,  # 1st half
             41: MatchStatus.LIVE,  # 2nd half

@@ -202,6 +202,128 @@ class BaseCollector(ABC):
         logger.debug(f"Waiting up to {timeout}s for data interception")
         await asyncio.sleep(timeout)
 
+    async def handle_consent_dialog(self, timeout: float = 5.0) -> bool:
+        """
+        Handle cookie consent dialog if it appears.
+
+        This method checks for a consent dialog and clicks the "Consent" button
+        if found. It logs all available buttons before clicking.
+
+        Args:
+            timeout: Maximum time to wait for consent dialog (in seconds)
+
+        Returns:
+            True if consent button was clicked, False otherwise
+
+        Raises:
+            RuntimeError: If page is not initialized
+        """
+        if not self.page:
+            raise RuntimeError("Page not initialized. Call setup() first.")
+
+        try:
+            # Wait for consent dialog to appear (with timeout)
+            consent_button = self.page.locator('.fc-cta-consent, button[aria-label="Consent"]')
+
+            try:
+                await consent_button.wait_for(state="visible", timeout=timeout * 1000)
+            except Exception:
+                logger.debug("No consent dialog found")
+                return False
+
+            # Log all available buttons in the consent dialog
+            logger.info("Consent dialog detected. Available options:")
+
+            # Try to find all buttons in the consent footer
+            footer_buttons = self.page.locator('.fc-footer-buttons button')
+            button_count = await footer_buttons.count()
+
+            for i in range(button_count):
+                button = footer_buttons.nth(i)
+                aria_label = await button.get_attribute('aria-label')
+                text_content = await button.text_content()
+                logger.info(f"  - Button {i + 1}: {aria_label or text_content}")
+
+            # Click the consent button
+            if await consent_button.is_visible():
+                logger.info("Clicking 'Consent' button...")
+                await consent_button.click()
+                logger.info("Consent button clicked successfully")
+
+                # Wait for dialog to disappear
+                await asyncio.sleep(1.0)
+                return True
+            else:
+                logger.warning("Consent button not visible")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Error while handling consent dialog: {e}")
+            return False
+
+    async def click_show_all_buttons(self, wait_after: float = 2.0) -> int:
+        """
+        Find and click all "Show all" buttons on the page to expand collapsed content.
+
+        This method looks for buttons containing "Show all" text and clicks them
+        to reveal additional content that might be hidden by default.
+
+        Args:
+            wait_after: Seconds to wait after clicking buttons for content to expand
+
+        Returns:
+            Number of buttons clicked
+
+        Raises:
+            RuntimeError: If page is not initialized
+        """
+        if not self.page:
+            raise RuntimeError("Page not initialized. Call setup() first.")
+
+        try:
+            # Find all "Show all" buttons using text content
+            buttons = self.page.get_by_role("button", name="Show all")
+            button_count = await buttons.count()
+
+            if button_count == 0:
+                logger.debug("No 'Show all' buttons found on page")
+                return 0
+
+            logger.info(f"Found {button_count} 'Show all' button(s), clicking them...")
+
+            # Click each button
+            clicked = 0
+            for i in range(button_count):
+                try:
+                    button = buttons.nth(i)
+                    # Check if button is visible before clicking
+
+                    
+                    if await button.is_visible():
+                        await button.click()
+                        clicked += 1
+                        logger.debug(f"Clicked 'Show all' button {i + 1}/{button_count}")
+                        # Small delay between clicks
+                        if i < button_count - 1:
+                            await asyncio.sleep(4)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to click 'Show all' button {i + 1}: {e}"
+                    )
+                    continue
+
+            if clicked > 0:
+                # Wait for content to expand after clicking
+                logger.debug(f"Waiting {wait_after}s for content to expand")
+                await asyncio.sleep(wait_after)
+                logger.info(f"Successfully clicked {clicked} 'Show all' button(s)")
+
+            return clicked
+
+        except Exception as e:
+            logger.warning(f"Error while clicking 'Show all' buttons: {e}")
+            return 0
+
     def is_running(self) -> bool:
         """Check if collector is currently running."""
         return self._running

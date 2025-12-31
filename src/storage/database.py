@@ -189,6 +189,7 @@ class Match(Base):
     has_highlights: Mapped[bool] = mapped_column(Boolean, default=False)
     has_player_statistics: Mapped[bool] = mapped_column(Boolean, default=False)
     has_heatmap: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_inverse: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Additional data (JSON for flexibility)
     time_data: Mapped[Optional[dict]] = mapped_column(JSON)
@@ -229,6 +230,7 @@ class Match(Base):
         Index("ix_matches_home_team_id", "home_team_id"),
         Index("ix_matches_away_team_id", "away_team_id"),
         Index("ix_matches_league_id", "league_id"),
+        Index("ix_matches_is_inverse", "is_inverse"),
     )
 
     def __repr__(self) -> str:

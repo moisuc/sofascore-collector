@@ -26,11 +26,11 @@ class LiveTracker(BaseCollector):
 
     # Base URL patterns for each sport's live page
     LIVE_URLS = {
-        "football": "https://www.sofascore.com/football/livescore",
-        "tennis": "https://www.sofascore.com/tennis/livescore",
-        "basketball": "https://www.sofascore.com/basketball/livescore",
-        "handball": "https://www.sofascore.com/handball/livescore",
-        "volleyball": "https://www.sofascore.com/volleyball/livescore",
+        "football": "https://www.sofascore.com/football",
+        "tennis": "https://www.sofascore.com/tennis",
+        "basketball": "https://www.sofascore.com/basketball",
+        "handball": "https://www.sofascore.com/handball",
+        "volleyball": "https://www.sofascore.com/volleyball",
     }
 
     def __init__(
@@ -39,6 +39,8 @@ class LiveTracker(BaseCollector):
         sport: str,
         on_live_data: Any = None,
         on_scheduled_data: Any = None,
+        on_featured_data: Any = None,
+        on_inverse_data: Any = None,
         on_score_update: Any = None,
         on_incident: Any = None,
     ):
@@ -52,6 +54,10 @@ class LiveTracker(BaseCollector):
                           Signature: async def(data: dict, match: re.Match) -> None
             on_scheduled_data: Async callback for scheduled match data from HTTP responses
                               Signature: async def(data: dict, match: re.Match) -> None
+            on_featured_data: Async callback for featured match data from HTTP responses
+                             Signature: async def(data: dict, match: re.Match) -> None
+            on_inverse_data: Async callback for inverse scheduled match data from HTTP responses
+                            Signature: async def(data: dict, match: re.Match) -> None
             on_score_update: Async callback for WebSocket score updates
                            Signature: async def(data: dict) -> None
             on_incident: Async callback for WebSocket incident updates
@@ -70,6 +76,8 @@ class LiveTracker(BaseCollector):
         self.url = self.LIVE_URLS[sport]
         self.on_live_data = on_live_data
         self.on_scheduled_data = on_scheduled_data
+        self.on_featured_data = on_featured_data
+        self.on_inverse_data = on_inverse_data
         self.on_score_update = on_score_update
         self.on_incident = on_incident
 
@@ -88,6 +96,14 @@ class LiveTracker(BaseCollector):
             if self.on_scheduled_data:
                 self.http_interceptor.on("scheduled", self._handle_scheduled_response)
                 logger.debug(f"Registered HTTP handler for scheduled {self.sport} data")
+
+            if self.on_featured_data:
+                self.http_interceptor.on("featured", self._handle_featured_response)
+                logger.debug(f"Registered HTTP handler for featured {self.sport} data")
+
+            if self.on_inverse_data:
+                self.http_interceptor.on("inverse", self._handle_inverse_response)
+                logger.debug(f"Registered HTTP handler for inverse {self.sport} data")
 
         # Register WebSocket handlers
         if self.ws_interceptor:
@@ -112,14 +128,23 @@ class LiveTracker(BaseCollector):
 
         This method:
         1. Navigates to the live page
-        2. Waits for initial data load
-        3. Sets up periodic page refresh
-        4. Keeps running until stopped
+        2. Handles cookie consent dialog if it appears
+        3. Clicks "Show all" buttons to expand content
+        4. Waits for initial data load
+        5. Sets up periodic page refresh
+        6. Keeps running until stopped
         """
         logger.info(f"Starting live tracker for {self.sport}")
 
         # Navigate to live page
         await self.navigate_with_delay(self.url, wait_until="networkidle")
+
+        # Handle consent dialog if it appears
+        await self.handle_consent_dialog(timeout=5.0)
+
+        # Click "Show all" buttons if enabled
+        if settings.click_show_all:
+            await self.click_show_all_buttons(wait_after=settings.show_all_wait_after)
 
         # Wait for initial data to be intercepted
         await self.wait_for_data(timeout=5.0)
@@ -241,6 +266,70 @@ class LiveTracker(BaseCollector):
                 f"Error handling scheduled response for {self.sport}: {e}", exc_info=True
             )
 
+    async def _handle_featured_response(self, data: dict, match: re.Match) -> None:
+        """
+        Handle intercepted featured events HTTP response.
+
+        Args:
+            data: JSON response data
+            match: Regex match object containing URL groups
+        """
+        try:
+            sport_from_url = match.group(1) if match.lastindex >= 1 else None
+
+            # Verify this is our sport
+            if sport_from_url and sport_from_url != self.sport:
+                logger.debug(
+                    f"Ignoring featured data for different sport: {sport_from_url}"
+                )
+                return
+
+            logger.info(
+                f"Featured data intercepted for {self.sport}: "
+                f"{len(data.get('events', []))} events"
+            )
+
+            # Call user-provided handler
+            if self.on_featured_data:
+                await self.on_featured_data(data, match)
+
+        except Exception as e:
+            logger.error(
+                f"Error handling featured response for {self.sport}: {e}", exc_info=True
+            )
+
+    async def _handle_inverse_response(self, data: dict, match: re.Match) -> None:
+        """
+        Handle intercepted inverse scheduled events HTTP response.
+
+        Args:
+            data: JSON response data
+            match: Regex match object containing URL groups
+        """
+        try:
+            sport_from_url = match.group(1) if match.lastindex >= 1 else None
+
+            # Verify this is our sport
+            if sport_from_url and sport_from_url != self.sport:
+                logger.debug(
+                    f"Ignoring inverse data for different sport: {sport_from_url}"
+                )
+                return
+
+            logger.info(
+                f"Inverse data intercepted for {self.sport}: "
+                f"{len(data.get('events', []))} events"
+            )
+
+            # Call user-provided handler
+            if self.on_inverse_data:
+                await self.on_inverse_data(data, match)
+
+        except Exception as e:
+            logger.error(
+                f"Error handling inverse response for {self.sport}: {e}", exc_info=True
+            )
+
     async def _handle_ws_message(self, data: dict) -> None:
         """
         Handle WebSocket message (fallback for generic interceptor).
@@ -285,6 +374,8 @@ async def create_live_tracker(
     sport: str,
     on_live_data: Any = None,
     on_scheduled_data: Any = None,
+    on_featured_data: Any = None,
+    on_inverse_data: Any = None,
     on_score_update: Any = None,
     on_incident: Any = None,
 ) -> LiveTracker:
@@ -296,6 +387,8 @@ async def create_live_tracker(
         sport: Sport to track
         on_live_data: Callback for live match data
         on_scheduled_data: Callback for scheduled match data
+        on_featured_data: Callback for featured match data
+        on_inverse_data: Callback for inverse scheduled match data
         on_score_update: Callback for score updates
         on_incident: Callback for incidents
 
@@ -318,6 +411,8 @@ async def create_live_tracker(
         sport=sport,
         on_live_data=on_live_data,
         on_scheduled_data=on_scheduled_data,
+        on_featured_data=on_featured_data,
+        on_inverse_data=on_inverse_data,
         on_score_update=on_score_update,
         on_incident=on_incident,
     )

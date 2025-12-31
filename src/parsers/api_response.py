@@ -308,3 +308,29 @@ def parse_event_detail(response_data: dict) -> dict[str, Any]:
     # Event detail response has 'event' key instead of 'events'
     event_data = response_data.get("event", response_data)
     return APIResponseParser.parse_event(event_data)
+
+
+def parse_featured_events(response_data: dict) -> list[dict[str, Any]]:
+    """
+    Parse featured events API response.
+
+    Args:
+        response_data: Response from /api/v1/odds/{id}/featured-events/{sport}
+
+    Returns:
+        List of parsed featured events
+    """
+    return APIResponseParser.parse_events_list(response_data)
+
+
+def parse_inverse_events(response_data: dict) -> list[dict[str, Any]]:
+    """
+    Parse inverse scheduled events API response.
+
+    Args:
+        response_data: Response from /api/v1/sport/{sport}/scheduled-events/{date}/inverse
+
+    Returns:
+        List of parsed inverse scheduled events
+    """
+    return APIResponseParser.parse_events_list(response_data)

@@ -12,9 +12,13 @@ logger = logging.getLogger(__name__)
 # Patterns de interes pentru interceptare
 API_PATTERNS: dict[str, Pattern] = {
     "scheduled": re.compile(
-        r"/api/v1/sport/(\w+)/scheduled-events/(\d{4}-\d{2}-\d{2})"
+        r"/api/v1/sport/(\w+)/scheduled-events/(\d{4}-\d{2}-\d{2})(?!/inverse)"
     ),
     "live": re.compile(r"/api/v1/sport/(\w+)/events/live"),
+    "featured": re.compile(r"/api/v1/odds/\d+/featured-events/(\w+)"),
+    "inverse": re.compile(
+        r"/api/v1/sport/(\w+)/scheduled-events/(\d{4}-\d{2}-\d{2})/inverse"
+    ),
 }
 
 
@@ -182,7 +186,7 @@ async def create_interceptor(page: Page) -> ResponseInterceptor:
     Example:
         interceptor = await create_interceptor(page)
         interceptor.on('live', my_handler)
-        await page.goto('https://www.sofascore.com/football/livescore')
+        await page.goto('https://www.sofascore.com/football')
     """
     interceptor = ResponseInterceptor()
     await interceptor.attach(page)
