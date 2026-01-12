@@ -89,6 +89,18 @@ class CollectorCoordinator:
         )
         logger.info(f"Scheduled browser cleanup (interval: {settings.chrome_cleanup_interval}s)")
 
+        # Start file storage cleanup task if enabled
+        if settings.file_storage_enabled and self.handler and self.handler.file_storage:
+            await self.handler.file_storage.start_cleanup_task(
+                interval_seconds=settings.file_storage_cleanup_interval,
+                max_age_days=settings.file_storage_max_age_days
+            )
+            logger.info(
+                f"File storage cleanup scheduled "
+                f"(interval: {settings.file_storage_cleanup_interval}s, "
+                f"max_age: {settings.file_storage_max_age_days} days)"
+            )
+
         self._running = True
         logger.info("Coordinator initialization complete")
 
@@ -437,6 +449,14 @@ class CollectorCoordinator:
     async def cleanup(self) -> None:
         """Cleanup all resources."""
         logger.info("Cleaning up coordinator resources...")
+
+        # Stop file storage cleanup task
+        if self.handler and self.handler.file_storage:
+            try:
+                await self.handler.file_storage.stop_cleanup_task()
+                logger.info("File storage cleanup task stopped")
+            except Exception as e:
+                logger.error(f"Error stopping file storage cleanup task: {e}", exc_info=True)
 
         # Stop memory monitor
         if self.memory_monitor:

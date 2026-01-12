@@ -75,3 +75,21 @@ class HealthResponse(BaseModel):
     status: str = "healthy"
     timestamp: datetime
     database_connected: bool
+
+
+class FileMetadata(BaseModel):
+    """Metadata for a stored JSON file."""
+
+    filename: str = Field(..., description="File name")
+    pattern: str = Field(..., description="API pattern (live, scheduled, featured, inverse)")
+    sport: str = Field(..., description="Sport type")
+    date: str = Field(..., description="Date string (YYYY_MM_DD)")
+    size_bytes: int = Field(..., description="File size in bytes")
+    modified_at: datetime = Field(..., description="Last modified timestamp")
+
+
+class FileListResponse(BaseModel):
+    """Response for file listing."""
+
+    total: int = Field(..., description="Total number of files")
+    files: list[FileMetadata] = Field(..., description="List of files")

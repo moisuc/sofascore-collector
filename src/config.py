@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     chrome_cleanup_interval: int = 3600  # Chrome cleanup interval (1 hour)
     memory_metrics_file: str = "data/memory_metrics.json"  # Metrics file path
 
+    # File Storage settings
+    file_storage_enabled: bool = True  # Enable/disable file-based storage
+    file_storage_base_path: str = "data/files"  # Base directory for JSON files
+    file_storage_max_age_days: int = 10  # Delete files older than N days
+    file_storage_cleanup_interval: int = 3600  # Cleanup interval in seconds (1 hour)
+
 
 # Global settings instance
 settings = Settings()

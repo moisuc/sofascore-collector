@@ -2,6 +2,8 @@
 
 import logging
 import re
+from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,8 @@ from src.storage.repositories import (
     MatchRepository,
     IncidentRepository,
 )
+from src.storage.file_storage import FileStorageService
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,14 @@ class DataHandler:
         self.session = session
         self._should_close_session = session is None
 
+        # Initialize file storage if enabled
+        if settings.file_storage_enabled:
+            self.file_storage = FileStorageService(
+                base_path=Path(settings.file_storage_base_path)
+            )
+        else:
+            self.file_storage = None
+
     def _get_session(self) -> Session:
         """Get database session (create new if not provided in __init__)."""
         if self.session:
@@ -68,6 +80,14 @@ class DataHandler:
         session = None
         try:
             sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
+
+            # Save raw response to file
+            if self.file_storage:
+                try:
+                    date_str = datetime.now().strftime("%Y_%m_%d")
+                    self.file_storage.save_response("live", sport, date_str, data)
+                except Exception as e:
+                    logger.error(f"Failed to save live response to file: {e}")
 
             # Parse events using existing parser
             parsed_events = parse_live_events(data)
@@ -197,6 +217,15 @@ class DataHandler:
         try:
             sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
             date_str = match.group(2) if match.lastindex and match.lastindex >= 2 else "unknown"
+
+            # Save raw response to file
+            if self.file_storage:
+                try:
+                    # Convert date format: 2025-01-12 -> 2025_01_12
+                    date_str_formatted = date_str.replace("-", "_")
+                    self.file_storage.save_response("scheduled", sport, date_str_formatted, data)
+                except Exception as e:
+                    logger.error(f"Failed to save scheduled response to file: {e}")
 
             # Parse events using existing parser
             parsed_events = parse_scheduled_events(data)
@@ -328,6 +357,14 @@ class DataHandler:
         try:
             sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
 
+            # Save raw response to file
+            if self.file_storage:
+                try:
+                    date_str = datetime.now().strftime("%Y_%m_%d")
+                    self.file_storage.save_response("featured", sport, date_str, data)
+                except Exception as e:
+                    logger.error(f"Failed to save featured response to file: {e}")
+
             # Parse events using parser
             parsed_events = parse_featured_events(data)
 
@@ -455,6 +492,15 @@ class DataHandler:
         try:
             sport = match.group(1) if match.lastindex and match.lastindex >= 1 else "unknown"
             date_str = match.group(2) if match.lastindex and match.lastindex >= 2 else "unknown"
+
+            # Save raw response to file
+            if self.file_storage:
+                try:
+                    # Convert date format: 2025-01-12 -> 2025_01_12
+                    date_str_formatted = date_str.replace("-", "_")
+                    self.file_storage.save_response("inverse", sport, date_str_formatted, data)
+                except Exception as e:
+                    logger.error(f"Failed to save inverse response to file: {e}")
 
             # Parse events using parser
             parsed_events = parse_inverse_events(data)

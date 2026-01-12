@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
-from src.api.routes import live, matches, sports, stats
+from src.api.routes import files, live, matches, sports, stats
 from src.api.schemas import HealthResponse
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,7 @@ app.include_router(live.router, prefix="/live", tags=["Live Matches"])
 app.include_router(matches.router, prefix="/matches", tags=["Matches"])
 app.include_router(sports.router, prefix="/sports", tags=["Sports"])
 app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
+app.include_router(files.router, prefix="/files", tags=["Files"])
 
 
 # Root endpoint
