@@ -4,17 +4,29 @@ import logging
 from datetime import datetime, UTC
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.dependencies import get_db
 from src.api.routes import files, live, matches, sports, stats
 from src.api.schemas import HealthResponse
 from src.config import settings
+
+
+class RootPathMiddleware(BaseHTTPMiddleware):
+    """Middleware to set root_path from X-Forwarded-Prefix header."""
+
+    async def dispatch(self, request: Request, call_next):
+        # Check for X-Forwarded-Prefix header from nginx
+        forwarded_prefix = request.headers.get("x-forwarded-prefix", "")
+        if forwarded_prefix:
+            request.scope["root_path"] = forwarded_prefix
+        return await call_next(request)
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +50,20 @@ using browser automation (Playwright). No direct API calls are made.
 API_VERSION = "0.1.0"
 
 # Create FastAPI app
+# Determine root path from settings or default for known deployment
+_root_path = settings.api_root_path.rstrip("/") if settings.api_root_path else ""
+
 app = FastAPI(
     title=API_TITLE,
     description=API_DESCRIPTION,
     version=API_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
-    root_path=settings.api_root_path,  # Set via API_ROOT_PATH env var for reverse proxy
+    root_path=_root_path,
 )
+
+# Root path middleware (must be added first to set root_path before other processing)
+app.add_middleware(RootPathMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -111,6 +129,26 @@ async def root():
         "docs": "/docs",
         "health": "/health",
         "dashboard": "/dashboard",
+    }
+
+
+# Debug endpoint to check configuration
+@app.get("/debug", tags=["System"])
+async def debug_info(request: Request):
+    """
+    Debug endpoint to check proxy configuration.
+
+    Returns:
+        dict: Debug information about headers and root_path
+    """
+    return {
+        "configured_root_path": _root_path,
+        "request_root_path": request.scope.get("root_path", ""),
+        "x_forwarded_prefix": request.headers.get("x-forwarded-prefix", ""),
+        "x_forwarded_host": request.headers.get("x-forwarded-host", ""),
+        "x_forwarded_proto": request.headers.get("x-forwarded-proto", ""),
+        "host": request.headers.get("host", ""),
+        "openapi_url": app.openapi_url,
     }
 
 
