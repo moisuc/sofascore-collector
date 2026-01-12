@@ -43,7 +43,7 @@ app = FastAPI(
     version=API_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
-    root_path="/python/sofascore-collector/src/api",
+    # root_path is set via --root-path flag or FORWARDED headers from nginx
 )
 
 # CORS middleware
