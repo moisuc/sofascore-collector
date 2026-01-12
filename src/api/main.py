@@ -56,9 +56,12 @@ app.add_middleware(
 )
 
 # Mount static files
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+logger.info(f"Static directory path: {STATIC_DIR}, exists: {STATIC_DIR.exists()}")
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+else:
+    logger.warning(f"Static directory not found at {STATIC_DIR}")
 
 
 # Health check endpoint
