@@ -10,14 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 # Patterns de interes pentru interceptare
+
 API_PATTERNS: dict[str, Pattern] = {
     "scheduled": re.compile(
-        r"/api/v1/sport/(\w+)/scheduled-events/(\d{4}-\d{2}-\d{2})(?!/inverse)"
+        r"/api/v1/sport/([\w-]+)/scheduled-events/(\d{4}-\d{2}-\d{2})(?!/inverse)"
     ),
-    "live": re.compile(r"/api/v1/sport/(\w+)/events/live"),
-    "featured": re.compile(r"/api/v1/odds/\d+/featured-events/(\w+)"),
+    "live": re.compile(r"/api/v1/sport/([\w-]+)/events/live"),
+    "featured": re.compile(r"/api/v1/odds/\d+/featured-events/([\w-]+)"),
     "inverse": re.compile(
-        r"/api/v1/sport/(\w+)/scheduled-events/(\d{4}-\d{2}-\d{2})/inverse"
+        r"/api/v1/sport/([\w-]+)/scheduled-events/(\d{4}-\d{2}-\d{2})/inverse"
     ),
 }
 

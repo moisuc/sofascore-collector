@@ -31,6 +31,7 @@ class LiveTracker(BaseCollector):
         "basketball": "https://www.sofascore.com/basketball",
         "handball": "https://www.sofascore.com/handball",
         "volleyball": "https://www.sofascore.com/volleyball",
+        "ice-hockey": "https://www.sofascore.com/ice-hockey",
     }
 
     def __init__(

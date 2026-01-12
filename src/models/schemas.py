@@ -14,7 +14,7 @@ class Sport(str, Enum):
     BASKETBALL = "basketball"
     HANDBALL = "handball"
     VOLLEYBALL = "volleyball"
-
+    ICE_HOCKEY = "ice-hockey"
 
 class MatchStatus(str, Enum):
     """Match status enumeration."""

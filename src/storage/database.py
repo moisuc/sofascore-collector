@@ -63,7 +63,7 @@ class Sport(str, PyEnum):
     BASKETBALL = "basketball"
     HANDBALL = "handball"
     VOLLEYBALL = "volleyball"
-
+    ICE_HOCKEY = "ice-hockey"
 
 class MatchStatus(str, PyEnum):
     """Match status enumeration."""

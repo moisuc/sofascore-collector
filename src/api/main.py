@@ -40,7 +40,7 @@ Sports data API powered by SofaScore.com browser interception.
 * **Live Matches** - Real-time match data via WebSocket interception
 * **Match History** - Scheduled, finished, and postponed matches
 * **Statistics** - Detailed match statistics and incidents
-* **Multi-Sport** - Football, Tennis, Basketball, Handball, Volleyball
+* **Multi-Sport** - Football, Tennis, Basketball, Handball, Volleyball, Ice Hockey
 
 ## Data Source
 
@@ -50,7 +50,7 @@ using browser automation (Playwright). No direct API calls are made.
 API_VERSION = "0.1.0"
 
 # Create FastAPI app
-# Determine root path from settings or default for known deployment
+# Determine root path from settings
 _root_path = settings.api_root_path.rstrip("/") if settings.api_root_path else ""
 
 app = FastAPI(
@@ -62,8 +62,20 @@ app = FastAPI(
     root_path=_root_path,
 )
 
-# Root path middleware (must be added first to set root_path before other processing)
-app.add_middleware(RootPathMiddleware)
+
+@app.middleware("http")
+async def root_path_middleware(request: Request, call_next):
+    """Set root_path from X-Forwarded-Prefix header for reverse proxy support."""
+    forwarded_prefix = request.headers.get("x-forwarded-prefix", "")
+    if forwarded_prefix:
+        # Set root_path in request scope
+        request.scope["root_path"] = forwarded_prefix
+
+        # Update app's openapi_url on first request if not already set
+        if app.openapi_url == "/openapi.json" and forwarded_prefix:
+            app.openapi_url = f"{forwarded_prefix}/openapi.json"
+
+    return await call_next(request)
 
 # CORS middleware
 app.add_middleware(

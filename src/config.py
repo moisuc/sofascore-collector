@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Browser settings
     headless: bool = True
-    enable_ws_interceptor: bool = True  # Enable/disable WebSocket interceptor
+    enable_ws_interceptor: bool = False  # Enable/disable WebSocket interceptor
 
     # Database settings
     database_url: str = "sqlite:///data/sofascore.db"
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     # Sports to track
-    sports: list[str] = ["football", "tennis", "basketball", "handball", "volleyball"]
+    sports: list[str] = ["football", "tennis", "basketball", "handball", "volleyball", "ice-hockey"]
 
     # Rate limiting
     navigation_delay_min: int = 2
