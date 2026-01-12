@@ -6,8 +6,10 @@ const state = {
     refreshInterval: null,
 };
 
-// API configuration
-const API_BASE = window.location.origin;
+// API configuration - derive base path from current URL
+// Removes '/dashboard' from path to get the API root
+const basePath = window.location.pathname.replace(/\/dashboard$/, '');
+const API_BASE = window.location.origin + basePath;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
