@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Regex pattern to parse filename: {pattern}_{sport}_{date}.json
-FILENAME_PATTERN = re.compile(r"^(\w+)_(\w+)_(\d{4}_\d{2}_\d{2})\.json$")
+FILENAME_PATTERN = re.compile(r"^(\w+)_([\w-]+)_(\d{4}_\d{2}_\d{2})\.json$")
 
 
 def get_files_directory() -> Path:
