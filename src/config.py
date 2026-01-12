@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     file_storage_max_age_days: int = 10  # Delete files older than N days
     file_storage_cleanup_interval: int = 3600  # Cleanup interval in seconds (1 hour)
 
+    # API settings
+    api_root_path: str = ""  # Root path for reverse proxy (e.g., /python/sofascore-collector/src/api)
+
 
 # Global settings instance
 settings = Settings()

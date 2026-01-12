@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from src.api.dependencies import get_db
 from src.api.routes import files, live, matches, sports, stats
 from src.api.schemas import HealthResponse
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ app = FastAPI(
     version=API_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
-    # root_path is set via --root-path flag or FORWARDED headers from nginx
+    root_path=settings.api_root_path,  # Set via API_ROOT_PATH env var for reverse proxy
 )
 
 # CORS middleware
