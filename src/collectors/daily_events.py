@@ -154,7 +154,10 @@ class DailyEventsCollector(BaseCollector):
         logger.info(f"Collecting scheduled events for {self.sport} on {date_str}")
 
         # Navigate to date page
-        await self.navigate_with_delay(url, wait_until="networkidle")
+        # Use 'domcontentloaded' instead of 'networkidle' because WebSocket connections
+        # and periodic API calls prevent networkidle from ever being reached, causing timeouts.
+        # The HTTP interceptor captures the scheduled events API response regardless of wait strategy.
+        await self.navigate_with_delay(url, wait_until="domcontentloaded")
 
         # Handle consent dialog on first navigation only
         if not self._consent_handled:
