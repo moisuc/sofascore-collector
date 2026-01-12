@@ -13,6 +13,7 @@ from sqlalchemy import (
     Index,
     Enum,
     JSON,
+    TypeDecorator,
     create_engine,
 )
 from sqlalchemy.orm import (
@@ -25,6 +26,27 @@ from sqlalchemy.orm import (
 from sqlalchemy.pool import StaticPool
 
 from src.config import settings
+
+
+class JSONType(TypeDecorator):
+    """
+    JSON type that automatically uses JSONB on PostgreSQL, JSON elsewhere.
+
+    Provides optimal performance across different databases:
+    - PostgreSQL: JSONB (binary, indexable, efficient queries)
+    - SQLite/Others: JSON (standard TEXT storage)
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """Load the appropriate JSON type for the database dialect."""
+        if dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import JSONB
+
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
 
 
 class Base(DeclarativeBase):
@@ -71,7 +93,7 @@ class Team(Base):
     national: Mapped[bool] = mapped_column(Boolean, default=False)
     gender: Mapped[Optional[str]] = mapped_column(String(1))
     user_count: Mapped[int] = mapped_column(Integer, default=0)
-    team_colors: Mapped[Optional[dict]] = mapped_column(JSON)
+    team_colors: Mapped[Optional[dict]] = mapped_column(JSONType)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -191,9 +213,9 @@ class Match(Base):
     has_heatmap: Mapped[bool] = mapped_column(Boolean, default=False)
     is_inverse: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Additional data (JSON for flexibility)
-    time_data: Mapped[Optional[dict]] = mapped_column(JSON)
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    # Additional data (JSON for flexibility, JSONB on PostgreSQL)
+    time_data: Mapped[Optional[dict]] = mapped_column(JSONType)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONType)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -258,8 +280,8 @@ class MatchStatistic(Base):
     # Period (for period-specific stats)
     period: Mapped[Optional[str]] = mapped_column(String(50))
 
-    # Additional data
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    # Additional data (JSONB on PostgreSQL)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONType)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -319,8 +341,8 @@ class Incident(Base):
     player_out_id: Mapped[Optional[int]] = mapped_column(Integer)
     player_out_name: Mapped[Optional[str]] = mapped_column(String(255))
 
-    # Additional data
-    extra_data: Mapped[Optional[dict]] = mapped_column(JSON)
+    # Additional data (JSONB on PostgreSQL)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONType)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -352,26 +374,45 @@ _engine = None
 _session_factory = None
 
 
+def is_postgresql(db_url: str) -> bool:
+    """Check if database URL is for PostgreSQL."""
+    return db_url.startswith(("postgresql://", "postgresql+", "postgres://"))
+
+
 def get_engine():
-    """Get or create database engine."""
+    """Get or create database engine with appropriate configuration."""
     global _engine
     if _engine is None:
-        # Parse database URL
         db_url = settings.database_url
 
-        # Special handling for SQLite
+        # Database-specific configuration
         if db_url.startswith("sqlite"):
+            # SQLite: Single connection with StaticPool
             connect_args = {"check_same_thread": False}
             poolclass = StaticPool
+            pool_kwargs = {}
+        elif is_postgresql(db_url):
+            # PostgreSQL: Connection pooling with QueuePool
+            connect_args = {}
+            poolclass = None  # Use default QueuePool
+            pool_kwargs = {
+                "pool_size": 5,  # Base connections
+                "max_overflow": 10,  # Additional connections on demand
+                "pool_pre_ping": True,  # Verify connections before use
+                "pool_recycle": 3600,  # Recycle connections after 1 hour
+            }
         else:
+            # Other databases: Use defaults
             connect_args = {}
             poolclass = None
+            pool_kwargs = {}
 
         _engine = create_engine(
             db_url,
             connect_args=connect_args,
             poolclass=poolclass,
             echo=False,  # Set to True for SQL logging
+            **pool_kwargs,
         )
 
     return _engine
