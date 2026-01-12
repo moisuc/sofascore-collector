@@ -53,7 +53,7 @@ app.add_middleware(
 )
 
 # Mount static files
-STATIC_DIR = Path(__file__) / "static"
+STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
