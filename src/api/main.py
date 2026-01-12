@@ -1,5 +1,6 @@
 """FastAPI application for SofaScore data API."""
 
+import logging
 from datetime import datetime, UTC
 from pathlib import Path
 
@@ -7,12 +8,14 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_db
 from src.api.routes import live, matches, sports, stats
 from src.api.schemas import HealthResponse
-from src.storage.database import get_engine
+
+logger = logging.getLogger(__name__)
 
 # API metadata
 API_TITLE = "SofaScore Collector API"
@@ -69,11 +72,9 @@ async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
     """
     database_connected = True
     try:
-        # Test database connection
-        engine = get_engine()
-        with engine.connect() as conn:
-            conn.execute("SELECT 1")
-    except Exception:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        logger.warning(f"Database health check failed: {e}")
         database_connected = False
 
     return HealthResponse(
