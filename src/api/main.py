@@ -95,34 +95,34 @@ else:
     logger.warning(f"Static directory not found at {STATIC_DIR}")
 
 
-# Health check endpoint
-@app.get("/health", response_model=HealthResponse, tags=["System"])
-async def health_check() -> HealthResponse:
-    """
-    API health check.
+# # Health check endpoint
+# @app.get("/health", response_model=HealthResponse, tags=["System"])
+# async def health_check() -> HealthResponse:
+#     """
+#     API health check.
 
-    Returns:
-        HealthResponse: Health status with database connectivity
-    """
-    database_connected = False
+#     Returns:
+#         HealthResponse: Health status with database connectivity
+#     """
+#     database_connected = False
 
-    # Only check database if enabled
-    if settings.storage_mode.uses_database():
-        try:
-            from src.storage.database import get_session
-            db = get_session()
-            db.execute(text("SELECT 1"))
-            db.close()
-            database_connected = True
-        except Exception as e:
-            logger.warning(f"Database health check failed: {e}")
-            database_connected = False
+#     # Only check database if enabled
+#     if settings.storage_mode.uses_database():
+#         try:
+#             from src.storage.database import get_session
+#             db = get_session()
+#             db.execute(text("SELECT 1"))
+#             db.close()
+#             database_connected = True
+#         except Exception as e:
+#             logger.warning(f"Database health check failed: {e}")
+#             database_connected = False
 
-    return HealthResponse(
-        status="healthy" if (database_connected or not settings.storage_mode.uses_database()) else "degraded",
-        timestamp=datetime.now(UTC),
-        database_connected=database_connected,
-    )
+#     return HealthResponse(
+#         status="healthy" if (database_connected or not settings.storage_mode.uses_database()) else "degraded",
+#         timestamp=datetime.now(UTC),
+#         database_connected=database_connected,
+#     )
 
 
 # Include routers conditionally based on storage mode
@@ -131,6 +131,19 @@ if settings.storage_mode.uses_database():
     app.include_router(matches.router, prefix="/matches", tags=["Matches"])
     app.include_router(sports.router, prefix="/sports", tags=["Sports"])
     app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
+    # Dashboard endpoint
+    @app.get("/dashboard", tags=["System"])
+    async def dashboard():
+        """
+        Serve the web dashboard.
+    
+        Returns:
+            HTML: Dashboard interface
+        """
+        index_path = STATIC_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path)
+        return {"error": "Dashboard not found"}
     logger.info("Database-dependent API routes registered")
 else:
     logger.info("Database routes disabled (storage_mode does not use database)")
@@ -160,36 +173,7 @@ async def root():
     }
 
 
-# Debug endpoint to check configuration
-@app.get("/debug", tags=["System"])
-async def debug_info(request: Request):
-    """
-    Debug endpoint to check proxy configuration.
-
-    Returns:
-        dict: Debug information about headers and root_path
-    """
-    return {
-        "configured_root_path": _root_path,
-        "request_root_path": request.scope.get("root_path", ""),
-        "x_forwarded_prefix": request.headers.get("x-forwarded-prefix", ""),
-        "x_forwarded_host": request.headers.get("x-forwarded-host", ""),
-        "x_forwarded_proto": request.headers.get("x-forwarded-proto", ""),
-        "host": request.headers.get("host", ""),
-        "openapi_url": app.openapi_url,
-    }
 
 
-# Dashboard endpoint
-@app.get("/dashboard", tags=["System"])
-async def dashboard():
-    """
-    Serve the web dashboard.
 
-    Returns:
-        HTML: Dashboard interface
-    """
-    index_path = STATIC_DIR / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    return {"error": "Dashboard not found"}
+
