@@ -149,3 +149,5 @@ data/sofascore.db
 data/files/scheduled_football_2026_01_12.json
 data/files/inverse_football_2026_01_12.json
 data/files/featured_football_2026_01_12.json
+sofascore-api.service
+sofascore-collector.service

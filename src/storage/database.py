@@ -1,5 +1,6 @@
 """SQLAlchemy database models for SofaScore data."""
 
+import logging
 from datetime import datetime, UTC
 from enum import Enum as PyEnum
 from typing import Optional
@@ -26,6 +27,8 @@ from sqlalchemy.orm import (
 from sqlalchemy.pool import StaticPool
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class JSONType(TypeDecorator):
@@ -431,6 +434,10 @@ def get_session() -> Session:
 
 def init_db():
     """Initialize database (create all tables)."""
+    if not settings.storage_mode.uses_database():
+        logger.warning("init_db() called but database storage is disabled")
+        return
+
     engine = get_engine()
     Base.metadata.create_all(engine)
     print("Database initialized successfully")

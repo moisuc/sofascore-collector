@@ -1,0 +1,52 @@
+# Systemd service file for SofaScore Collector (Main Data Collection)
+#
+# Installation:
+# 1. Edit this file and update paths/user if needed
+# 2. Copy to systemd: sudo cp sofascore-collector.service /etc/systemd/system/sofascore-collector.service
+# 3. Reload systemd: sudo systemctl daemon-reload
+# 4. Enable service: sudo systemctl enable sofascore-collector
+# 5. Start service: sudo systemctl start sofascore-collector
+# 6. Check status: sudo systemctl status sofascore-collector
+#
+# Logs:
+# - View logs: sudo journalctl -u sofascore-collector -f
+# - View recent: sudo journalctl -u sofascore-collector -n 100
+
+[Unit]
+Description=SofaScore Collector (Data Collection)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=catalin
+Group=www-data
+WorkingDirectory=/var/www/python/sofascore-collector
+
+# Use uv with virtual environment
+Environment="PATH=/var/www/python/sofascore-collector/.venv/bin:/home/catalin/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PLAYWRIGHT_BROWSERS_PATH=/home/catalin/.cache/ms-playwright"
+
+# Load environment variables from .env file
+EnvironmentFile=/var/www/python/sofascore-collector/.env
+
+# Run main collector with schedule collection (past 3 days, future 3 days)
+ExecStart=/home/catalin/.local/bin/uv run python main.py --collect-schedule-past 3 --collect-schedule-future 3
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+
+# Standard output/error
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

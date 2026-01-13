@@ -61,9 +61,17 @@ class CollectorCoordinator:
         """
         logger.info("Initializing coordinator resources...")
 
-        # Initialize database
-        init_db()
-        logger.info("Database initialized")
+        # Log storage mode configuration
+        logger.info(f"Storage mode: {settings.storage_mode.value}")
+        logger.info(f"Database enabled: {settings.storage_mode.uses_database()}")
+        logger.info(f"File storage enabled: {settings.storage_mode.uses_files()}")
+
+        # Initialize database if enabled
+        if settings.storage_mode.uses_database():
+            init_db()
+            logger.info("Database initialized")
+        else:
+            logger.info("Database storage disabled, skipping DB initialization")
 
         # Create browser manager
         self.browser_manager = BrowserManager(headless=self.headless)
@@ -90,7 +98,7 @@ class CollectorCoordinator:
         logger.info(f"Scheduled browser cleanup (interval: {settings.chrome_cleanup_interval}s)")
 
         # Start file storage cleanup task if enabled
-        if settings.file_storage_enabled and self.handler and self.handler.file_storage:
+        if settings.storage_mode.uses_files() and self.handler and self.handler.file_storage:
             await self.handler.file_storage.start_cleanup_task(
                 interval_seconds=settings.file_storage_cleanup_interval,
                 max_age_days=settings.file_storage_max_age_days

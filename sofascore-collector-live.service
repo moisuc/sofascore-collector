@@ -1,0 +1,52 @@
+# Systemd service file for SofaScore Collector (Live Tracking)
+#
+# Installation:
+# 1. Edit this file and update paths/user if needed
+# 2. Copy to systemd: sudo cp sofascore-collector-live.service /etc/systemd/system/sofascore-collector-live.service
+# 3. Reload systemd: sudo systemctl daemon-reload
+# 4. Enable service: sudo systemctl enable sofascore-collector-live
+# 5. Start service: sudo systemctl start sofascore-collector-live
+# 6. Check status: sudo systemctl status sofascore-collector-live
+#
+# Logs:
+# - View logs: sudo journalctl -u sofascore-collector-live -f
+# - View recent: sudo journalctl -u sofascore-collector-live -n 100
+
+[Unit]
+Description=SofaScore Collector (Live Tracking)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=catalin
+Group=www-data
+WorkingDirectory=/var/www/python/sofascore-collector
+
+# Use uv with virtual environment
+Environment="PATH=/var/www/python/sofascore-collector/.venv/bin:/home/catalin/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PLAYWRIGHT_BROWSERS_PATH=/home/catalin/.cache/ms-playwright"
+
+# Load environment variables from .env file
+EnvironmentFile=/var/www/python/sofascore-collector/.env
+
+# Run live tracker (default behavior without arguments)
+ExecStart=/home/catalin/.local/bin/uv run python main.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+
+# Standard output/error
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

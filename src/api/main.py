@@ -97,33 +97,49 @@ else:
 
 # Health check endpoint
 @app.get("/health", response_model=HealthResponse, tags=["System"])
-async def health_check(db: Session = Depends(get_db)) -> HealthResponse:
+async def health_check() -> HealthResponse:
     """
     API health check.
 
     Returns:
         HealthResponse: Health status with database connectivity
     """
-    database_connected = True
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception as e:
-        logger.warning(f"Database health check failed: {e}")
-        database_connected = False
+    database_connected = False
+
+    # Only check database if enabled
+    if settings.storage_mode.uses_database():
+        try:
+            from src.storage.database import get_session
+            db = get_session()
+            db.execute(text("SELECT 1"))
+            db.close()
+            database_connected = True
+        except Exception as e:
+            logger.warning(f"Database health check failed: {e}")
+            database_connected = False
 
     return HealthResponse(
-        status="healthy" if database_connected else "degraded",
+        status="healthy" if (database_connected or not settings.storage_mode.uses_database()) else "degraded",
         timestamp=datetime.now(UTC),
         database_connected=database_connected,
     )
 
 
-# Include routers
-app.include_router(live.router, prefix="/live", tags=["Live Matches"])
-app.include_router(matches.router, prefix="/matches", tags=["Matches"])
-app.include_router(sports.router, prefix="/sports", tags=["Sports"])
-app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
-app.include_router(files.router, prefix="/files", tags=["Files"])
+# Include routers conditionally based on storage mode
+if settings.storage_mode.uses_database():
+    app.include_router(live.router, prefix="/live", tags=["Live Matches"])
+    app.include_router(matches.router, prefix="/matches", tags=["Matches"])
+    app.include_router(sports.router, prefix="/sports", tags=["Sports"])
+    app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
+    logger.info("Database-dependent API routes registered")
+else:
+    logger.info("Database routes disabled (storage_mode does not use database)")
+
+if settings.storage_mode.uses_files():
+    app.include_router(files.router, prefix="/files", tags=["Files"])
+    logger.info("File storage API routes registered")
+else:
+    logger.info("File routes disabled (storage_mode does not use files)")
 
 
 # Root endpoint

@@ -49,15 +49,17 @@ class DataHandler:
         self._should_close_session = session is None
 
         # Initialize file storage if enabled
-        if settings.file_storage_enabled:
+        if settings.storage_mode.uses_files():
             self.file_storage = FileStorageService(
                 base_path=Path(settings.file_storage_base_path)
             )
         else:
             self.file_storage = None
 
-    def _get_session(self) -> Session:
-        """Get database session (create new if not provided in __init__)."""
+    def _get_session(self) -> Session | None:
+        """Get database session (create new if not provided in __init__). Returns None if database disabled."""
+        if not settings.storage_mode.uses_database():
+            return None
         if self.session:
             return self.session
         return get_session()
@@ -88,6 +90,11 @@ class DataHandler:
                     self.file_storage.save_response("live", sport, date_str, data)
                 except Exception as e:
                     logger.error(f"Failed to save live response to file: {e}")
+
+            # Early return if database storage is disabled
+            if not settings.storage_mode.uses_database():
+                logger.debug(f"Database storage disabled, skipping DB persistence for {sport} live events")
+                return
 
             # Parse events using existing parser
             parsed_events = parse_live_events(data)
@@ -227,6 +234,11 @@ class DataHandler:
                 except Exception as e:
                     logger.error(f"Failed to save scheduled response to file: {e}")
 
+            # Early return if database storage is disabled
+            if not settings.storage_mode.uses_database():
+                logger.debug(f"Database storage disabled, skipping DB persistence for {sport} scheduled events on {date_str}")
+                return
+
             # Parse events using existing parser
             parsed_events = parse_scheduled_events(data)
 
@@ -365,6 +377,11 @@ class DataHandler:
                 except Exception as e:
                     logger.error(f"Failed to save featured response to file: {e}")
 
+            # Early return if database storage is disabled
+            if not settings.storage_mode.uses_database():
+                logger.debug(f"Database storage disabled, skipping DB persistence for {sport} featured events")
+                return
+
             # Parse events using parser
             parsed_events = parse_featured_events(data)
 
@@ -502,6 +519,11 @@ class DataHandler:
                 except Exception as e:
                     logger.error(f"Failed to save inverse response to file: {e}")
 
+            # Early return if database storage is disabled
+            if not settings.storage_mode.uses_database():
+                logger.debug(f"Database storage disabled, skipping DB persistence for {sport} inverse events on {date_str}")
+                return
+
             # Parse events using parser
             parsed_events = parse_inverse_events(data)
 
@@ -630,6 +652,11 @@ class DataHandler:
         """
         session = None
         try:
+            # Early return if database storage is disabled
+            if not settings.storage_mode.uses_database():
+                logger.debug("Database storage disabled, skipping score update")
+                return
+
             # Parse score update
             parsed = parse_score_update(data)
 
@@ -696,6 +723,11 @@ class DataHandler:
         """
         session = None
         try:
+            # Early return if database storage is disabled
+            if not settings.storage_mode.uses_database():
+                logger.debug("Database storage disabled, skipping incident storage")
+                return
+
             # Parse incident
             parsed = parse_incident(data)
 

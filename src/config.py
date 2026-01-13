@@ -1,7 +1,23 @@
 """Application configuration using pydantic-settings."""
 
+from enum import Enum
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal
+
+
+class StorageMode(str, Enum):
+    """Storage mode configuration."""
+    DATABASE = "database"
+    FILES = "files"
+    BOTH = "both"
+
+    def uses_database(self) -> bool:
+        """Check if database storage is enabled."""
+        return self in (StorageMode.DATABASE, StorageMode.BOTH)
+
+    def uses_files(self) -> bool:
+        """Check if file storage is enabled."""
+        return self in (StorageMode.FILES, StorageMode.BOTH)
 
 
 class Settings(BaseSettings):
@@ -60,8 +76,8 @@ class Settings(BaseSettings):
     chrome_cleanup_interval: int = 3600  # Chrome cleanup interval (1 hour)
     memory_metrics_file: str = "data/memory_metrics.json"  # Metrics file path
 
-    # File Storage settings
-    file_storage_enabled: bool = True  # Enable/disable file-based storage
+    # Storage Mode settings
+    storage_mode: StorageMode = StorageMode.BOTH  # Storage backend: database, files, or both
     file_storage_base_path: str = "data/files"  # Base directory for JSON files
     file_storage_max_age_days: int = 10  # Delete files older than N days
     file_storage_cleanup_interval: int = 3600  # Cleanup interval in seconds (1 hour)
