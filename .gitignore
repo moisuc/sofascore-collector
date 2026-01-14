@@ -151,3 +151,5 @@ data/files/inverse_football_2026_01_12.json
 data/files/featured_football_2026_01_12.json
 sofascore-api.service
 sofascore-collector.service
+sofascore-collector-live.service
+sofascore-collector-multiple-days.service

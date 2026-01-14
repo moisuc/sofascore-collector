@@ -45,10 +45,19 @@ def parse_args():
         help="Collect future matches in schedule window (requires --collect-schedule-past)",
     )
 
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        metavar="N",
+        help="Number of iterations to run (default: run forever). Each iteration is ~10 seconds.",
+    )
+
     return parser.parse_args()
 
 
 async def main():
+
+
     """
     Main function to run the SofaScore collector.
 
@@ -57,7 +66,7 @@ async def main():
     2. Starts live trackers for all configured sports
     3. Optionally collects upcoming matches (if --collect-upcoming is set)
     4. Optionally collects schedule window (if --collect-schedule-* are set)
-    5. Runs until interrupted (Ctrl+C)
+    5. Runs for specified iterations (if --iterations is set) or until interrupted (Ctrl+C)
     6. Performs graceful shutdown
     """
     args = parse_args()
@@ -67,7 +76,6 @@ async def main():
     logger.info(f"Headless mode: {settings.headless}")
 
     coordinator = await create_coordinator(headless=settings.headless)
-    should_run_forever = True  # Always run forever in this main script
     try:
         if args.collect_upcoming is None and \
            args.collect_schedule_past is None and \
@@ -87,7 +95,6 @@ async def main():
             for sport in settings.sports:
                 await coordinator.collect_upcoming_matches(sport, days_ahead=args.collect_upcoming)
             logger.info("Upcoming matches collection complete")
-            should_run_forever = True  # Exit after collecting upcoming matches
         # Optional: Collect schedule window (past + future) for all sports
         if args.collect_schedule_past is not None and args.collect_schedule_future is not None:
             logger.info(
@@ -99,7 +106,6 @@ async def main():
                 days_future=args.collect_schedule_future
             )
             logger.info("Schedule window collection complete")
-            should_run_forever = True  # Exit after collecting schedule window
         elif args.collect_schedule_past is not None or args.collect_schedule_future is not None:
             logger.warning(
                 "Both --collect-schedule-past and --collect-schedule-future must be specified. "
@@ -109,8 +115,21 @@ async def main():
         # Show status
         status = coordinator.get_status()
         logger.info(f"Coordinator status: {status['running_collectors']}/{status['total_collectors']} collectors running")
-        if should_run_forever:
-             # Run until interrupted
+
+        # Run until interrupted or for specified iterations
+        if args.iterations is not None:
+            logger.info(f"Running for {args.iterations} iterations (~{args.iterations * 10} seconds)")
+            for i in range(args.iterations):
+                logger.info(f"Iteration {i+1}/{args.iterations}")
+                await asyncio.sleep(10)  # Each iteration is 10 seconds
+
+                # Show status every iteration
+                status = coordinator.get_status()
+                logger.info(f"Status: {status['running_collectors']}/{status['total_collectors']} collectors running")
+
+            logger.info(f"Completed {args.iterations} iterations, stopping...")
+        else:
+            # Run until interrupted
             await coordinator.run_forever()
 
     finally:

@@ -693,6 +693,8 @@ class CollectorCoordinator:
             "running_collectors": sum(1 for c in self.collectors.values() if c.is_running()),
             "collectors": collector_statuses,
         }
+    
+    
 
     async def run_forever(self) -> None:
         """
