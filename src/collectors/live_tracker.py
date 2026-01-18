@@ -103,6 +103,7 @@ class LiveTracker(BaseCollector):
                 logger.debug(f"Registered HTTP handler for featured {self.sport} data")
 
             if self.on_inverse_data:
+                
                 self.http_interceptor.on("inverse", self._handle_inverse_response)
                 logger.debug(f"Registered HTTP handler for inverse {self.sport} data")
 

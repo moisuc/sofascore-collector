@@ -1,5 +1,10 @@
 """Browser pool management for Playwright automation."""
 
+import asyncio
+import logging
+import os
+from pathlib import Path
+
 from playwright.async_api import (
     async_playwright,
     Browser,
@@ -7,10 +12,11 @@ from playwright.async_api import (
     Page,
     Playwright,
 )
-import asyncio
-import logging
 
 logger = logging.getLogger(__name__)
+
+# Browser state persistence file (cookies + localStorage)
+STORAGE_STATE_PATH = Path("data/browser_state.json")
 
 
 class BrowserManager:
@@ -70,6 +76,13 @@ class BrowserManager:
             return self.contexts[name]
 
         logger.info(f"Creating browser context: {name}")
+
+        # Load browser state if file exists
+        storage_state = None
+        if STORAGE_STATE_PATH.exists():
+            storage_state = str(STORAGE_STATE_PATH)
+            logger.info(f"Loading browser state from {STORAGE_STATE_PATH}")
+
         context = await self.browser.new_context(
             viewport={"width": 1920, "height": 1080},
             user_agent=(
@@ -84,6 +97,7 @@ class BrowserManager:
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept-Encoding": "gzip, deflate, br",
             },
+            storage_state=storage_state,
         )
         self.contexts[name] = context
         logger.info(f"Context '{name}' created successfully")
@@ -286,6 +300,20 @@ class BrowserManager:
         for task_key in list(self._refresh_tasks.keys()):
             context_name = task_key.replace("_refresh", "")
             await self.stop_refresh(context_name)
+
+        # Save browser state before closing contexts
+        if self.contexts:
+            try:
+                # Save state from first available context
+                first_context = next(iter(self.contexts.values()))
+                # Ensure data directory exists
+                STORAGE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Saving browser state to {STORAGE_STATE_PATH}")
+                await first_context.storage_state(path=str(STORAGE_STATE_PATH))
+                logger.info("Browser state saved successfully")
+            except Exception as e:
+                logger.error(f"Failed to save browser state: {e}")
+                # Continue with shutdown even if save fails
 
         # Close all contexts
         for name in list(self.contexts.keys()):

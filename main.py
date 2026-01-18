@@ -84,10 +84,10 @@ async def main():
             trackers = await coordinator.add_live_trackers_for_all_sports()
             logger.info(f"Successfully started {len(trackers)} live trackers")
         # Start live trackers for all configured sports
-        # logger.info("Starting live trackers for all sports...")
-        # trackers = await coordinator.add_live_trackers_for_all_sports()
+        logger.info("Starting live trackers for all sports...")
+        trackers = await coordinator.add_live_trackers_for_all_sports()
 
-        # logger.info(f"Successfully started {len(trackers)} live trackers")
+        logger.info(f"Successfully started {len(trackers)} live trackers")
 
         # Optional: Collect upcoming matches for each sport
         if args.collect_upcoming is not None:

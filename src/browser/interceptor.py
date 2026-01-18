@@ -1,5 +1,4 @@
-"""HTTP response interceptor for capturing API responses."""
-
+import json
 from playwright.async_api import Page, Response
 import asyncio
 import logging
@@ -31,8 +30,11 @@ class ResponseInterceptor:
     responses to appropriate handlers.
     """
 
-    def __init__(self):
+    page: Page | None
+
+    def __init__(self, page: Page | None = None):
         """Initialize response interceptor."""
+        self.page = page
         self.handlers: dict[str, list[Callable[[dict, re.Match], Awaitable[None]]]] = {
             pattern_name: [] for pattern_name in API_PATTERNS.keys()
         }
@@ -71,6 +73,7 @@ class ResponseInterceptor:
         Args:
             page: Playwright page to monitor
         """
+        self.page = page
         page.on("response", self._on_response)
         logger.info("Response interceptor attached to page")
 
@@ -104,29 +107,50 @@ class ResponseInterceptor:
             match: Regex match object
         """
         try:
-            # Only process successful responses with JSON content
-            if not response.ok:
-                logger.debug(
-                    f"Skipping non-OK response: {response.url} (status: {response.status})"
-                )
+            data = None
+            if pattern_name == "inverse":
+                if self.page:
+                    logger.info(
+                        f"Opening inverse URL in new tab to fetch content: {response.url}"
+                    )
+                    new_page = await self.page.context.new_page()
+                    await new_page.goto(response.url)
+                    await new_page.wait_for_load_state("networkidle")
+
+                    pre_element = await new_page.query_selector("pre")
+                    if pre_element:
+                        json_text = await pre_element.inner_text()
+                        data = json.loads(json_text)
+                    else:
+                        json_text = await new_page.locator("body").text_content()
+                        if json_text:
+                            data = json.loads(json_text)
+
+                    await new_page.close()
+            else:
+                if not response.ok:
+                    logger.debug(
+                        f"Skipping non-OK response: {response.url} (status: {response.status})"
+                    )
+                    return
+
+                content_type = response.headers.get("content-type", "")
+                if "application/json" not in content_type:
+                    logger.debug(f"Skipping non-JSON response: {response.url}")
+                    return
+
+                try:
+                    data = await response.json()
+                except Exception as e:
+                    logger.warning(f"Failed to parse JSON from {response.url}: {e}")
+                    return
+
+            if data is None:
+                logger.warning(f"Could not retrieve data for {response.url}")
                 return
 
-            content_type = response.headers.get("content-type", "")
-            if "application/json" not in content_type:
-                logger.debug(f"Skipping non-JSON response: {response.url}")
-                return
-
-            # Parse JSON response
-            try:
-                data = await response.json()
-            except Exception as e:
-                logger.warning(f"Failed to parse JSON from {response.url}: {e}")
-                return
-
-            # Log intercepted response
             logger.info(f"Intercepted {pattern_name}: {response.url}")
 
-            # Call all registered handlers for this pattern
             handlers = self.handlers.get(pattern_name, [])
             if handlers:
                 for handler in handlers:
@@ -173,7 +197,6 @@ class ResponseInterceptor:
                 handlers_list.clear()
             logger.debug("Cleared all handlers")
 
-
 async def create_interceptor(page: Page) -> ResponseInterceptor:
     """
     Create and attach a response interceptor to a page.
@@ -189,6 +212,6 @@ async def create_interceptor(page: Page) -> ResponseInterceptor:
         interceptor.on('live', my_handler)
         await page.goto('https://www.sofascore.com/football')
     """
-    interceptor = ResponseInterceptor()
+    interceptor = ResponseInterceptor(page)
     await interceptor.attach(page)
     return interceptor
