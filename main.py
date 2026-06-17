@@ -46,6 +46,12 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--scores365",
+        action="store_true",
+        help="Enable the 365scores raw-capture tracker for this run",
+    )
+
+    parser.add_argument(
         "--iterations",
         type=int,
         metavar="N",
@@ -70,6 +76,10 @@ async def main():
     6. Performs graceful shutdown
     """
     args = parse_args()
+
+    # CLI override: enable 365scores capture for this run
+    if args.scores365:
+        settings.enable_scores365 = True
 
     logger.info("Starting SofaScore Collector")
     logger.info(f"Configured sports: {settings.sports}")

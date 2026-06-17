@@ -3,5 +3,6 @@
 from .base import BaseCollector
 from .live_tracker import LiveTracker
 from .daily_events import DailyEventsCollector
+from .scores365_tracker import Scores365Tracker
 
-__all__ = ["BaseCollector", "LiveTracker", "DailyEventsCollector"]
+__all__ = ["BaseCollector", "LiveTracker", "DailyEventsCollector", "Scores365Tracker"]

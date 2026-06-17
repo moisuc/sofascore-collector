@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     headless: bool = True
     enable_ws_interceptor: bool = False  # Enable/disable WebSocket interceptor
 
+    # Direct API fetch (uses captured X-Requested-With token to fetch JSON
+    # directly via context.request instead of navigating full pages)
+    enable_direct_fetch: bool = True
+    direct_fetch_interval: int = 30  # Live direct-fetch poll cadence in seconds
+
     # Database settings
     database_url: str = "sqlite:///data/sofascore.db"
 
@@ -75,6 +80,12 @@ class Settings(BaseSettings):
     memory_target_percent: float = 0.5  # Target 50% usage after cleanup
     chrome_cleanup_interval: int = 3600  # Chrome cleanup interval (1 hour)
     memory_metrics_file: str = "data/memory_metrics.json"  # Metrics file path
+
+    # 365scores collection (raw capture of webws.365scores.com traffic)
+    enable_scores365: bool = False  # Enable the 365scores live tracker
+    scores365_url: str = "https://www.365scores.com/"  # Page that triggers webws calls
+    scores365_refresh_interval: int = 60  # Page reload cadence in seconds
+    scores365_storage_path: str = "data/files/365scores"  # Raw capture directory
 
     # Storage Mode settings
     storage_mode: StorageMode = StorageMode.BOTH  # Storage backend: database, files, or both

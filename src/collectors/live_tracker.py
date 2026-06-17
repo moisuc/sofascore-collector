@@ -83,6 +83,7 @@ class LiveTracker(BaseCollector):
         self.on_incident = on_incident
 
         self._refresh_task: asyncio.Task | None = None
+        self._direct_fetch_task: asyncio.Task | None = None
 
     async def setup(self) -> None:
         """Setup page and register interceptor handlers."""
@@ -152,8 +153,13 @@ class LiveTracker(BaseCollector):
         await self.wait_for_data(timeout=5.0)
         logger.info(f"Initial data loaded for {self.sport}")
 
-        # Start periodic refresh to maintain connection
+        # Start periodic refresh to maintain connection (keeps the token fresh
+        # and serves as the fallback data source)
         self._refresh_task = asyncio.create_task(self._periodic_refresh())
+
+        # Start direct-fetch polling for live events (uses captured token)
+        if settings.enable_direct_fetch and self.on_live_data:
+            self._direct_fetch_task = asyncio.create_task(self._direct_fetch_loop())
 
         # Keep running and processing events
         try:
@@ -169,12 +175,40 @@ class LiveTracker(BaseCollector):
             logger.info(f"Live tracker for {self.sport} cancelled")
             raise
         finally:
-            if self._refresh_task:
-                self._refresh_task.cancel()
-                try:
-                    await self._refresh_task
-                except asyncio.CancelledError:
-                    pass
+            for task in (self._refresh_task, self._direct_fetch_task):
+                if task:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+    async def _direct_fetch_loop(self) -> None:
+        """Poll the live events endpoint directly using the captured token.
+
+        Runs alongside the page (which keeps the token fresh). Falls through
+        silently when no token is captured yet or a fetch fails - the periodic
+        page refresh remains the fallback data source.
+        """
+        interval = settings.direct_fetch_interval
+        logger.info(
+            f"Starting direct-fetch loop for live {self.sport} (interval: {interval}s)"
+        )
+
+        while self._running:
+            try:
+                await asyncio.sleep(interval)
+
+                result = await self.try_direct_fetch("live", sport=self.sport)
+                if result is not None:
+                    data, match = result
+                    await self._handle_live_response(data, match)
+
+            except asyncio.CancelledError:
+                logger.debug(f"Direct-fetch loop cancelled for {self.sport}")
+                raise
+            except Exception as e:
+                logger.error(f"Error in direct-fetch loop for {self.sport}: {e}")
 
     async def _periodic_refresh(self) -> None:
         """Refresh the page periodically to maintain connection."""
@@ -362,13 +396,14 @@ class LiveTracker(BaseCollector):
             )
 
     async def cleanup(self) -> None:
-        """Cleanup resources including refresh task."""
-        if self._refresh_task and not self._refresh_task.done():
-            self._refresh_task.cancel()
-            try:
-                await self._refresh_task
-            except asyncio.CancelledError:
-                pass
+        """Cleanup resources including refresh and direct-fetch tasks."""
+        for task in (self._refresh_task, self._direct_fetch_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
         await super().cleanup()
 

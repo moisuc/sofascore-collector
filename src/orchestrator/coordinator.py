@@ -8,7 +8,7 @@ from typing import Any
 from datetime import date, timedelta
 
 from src.browser.manager import BrowserManager
-from src.collectors import LiveTracker, DailyEventsCollector
+from src.collectors import LiveTracker, DailyEventsCollector, Scores365Tracker
 from src.config import settings
 from src.memory.monitor import MemoryMonitor
 from src.orchestrator.handlers import DataHandler
@@ -37,7 +37,7 @@ class CollectorCoordinator:
         """
         self.headless = headless if headless is not None else settings.headless
         self.browser_manager: BrowserManager | None = None
-        self.collectors: dict[str, LiveTracker | DailyEventsCollector] = {}
+        self.collectors: dict[str, LiveTracker | DailyEventsCollector | Scores365Tracker] = {}
         self.handler: DataHandler | None = None
         self._running = False
         self._shutdown_event = asyncio.Event()
@@ -45,7 +45,7 @@ class CollectorCoordinator:
         # Memory management
         self.memory_monitor: MemoryMonitor | None = None
         self._collector_start_times: dict[str, float] = {}  # Track collector start times
-        self._stopped_collectors: list[tuple[str, LiveTracker | DailyEventsCollector]] = []  # For restart
+        self._stopped_collectors: list[tuple[str, LiveTracker | DailyEventsCollector | Scores365Tracker]] = []  # For restart
 
         logger.info("CollectorCoordinator initialized")
 
@@ -108,6 +108,17 @@ class CollectorCoordinator:
                 f"(interval: {settings.file_storage_cleanup_interval}s, "
                 f"max_age: {settings.file_storage_max_age_days} days)"
             )
+
+        # Start 365scores raw-capture tracker if enabled
+        if settings.enable_scores365:
+            try:
+                tracker = await self.add_scores365_tracker(auto_start=True)
+                await tracker.storage.start_cleanup_task(
+                    interval_seconds=settings.file_storage_cleanup_interval,
+                    max_age_days=settings.file_storage_max_age_days,
+                )
+            except Exception as e:
+                logger.error(f"Failed to start 365scores tracker: {e}", exc_info=True)
 
         self._running = True
         logger.info("Coordinator initialization complete")
@@ -244,6 +255,44 @@ class CollectorCoordinator:
 
         logger.info(f"Added {len(trackers)}/{len(settings.sports)} live trackers")
         return trackers
+
+    async def add_scores365_tracker(self, auto_start: bool = True) -> Scores365Tracker:
+        """
+        Add the 365scores raw-capture tracker.
+
+        Captures live traffic from webws.365scores.com (allscores/current) and
+        saves it raw to disk. Independent of the SofaScore collection flow.
+
+        Args:
+            auto_start: Automatically start the tracker
+
+        Returns:
+            Scores365Tracker instance
+
+        Raises:
+            RuntimeError: If coordinator not initialized
+        """
+        if not self.browser_manager:
+            raise RuntimeError("Coordinator not initialized. Call initialize() first.")
+
+        collector_id = "scores365"
+
+        if collector_id in self.collectors:
+            logger.warning("365scores tracker already exists")
+            collector = self.collectors[collector_id]
+            assert isinstance(collector, Scores365Tracker)
+            return collector
+
+        logger.info("Adding 365scores tracker")
+        tracker = Scores365Tracker(browser_manager=self.browser_manager)
+        self.collectors[collector_id] = tracker
+
+        if auto_start:
+            await tracker.start()
+            self._collector_start_times[collector_id] = time.time()
+            logger.info("365scores tracker started")
+
+        return tracker
 
     async def backfill_historical_data(
         self,
@@ -466,6 +515,14 @@ class CollectorCoordinator:
             except Exception as e:
                 logger.error(f"Error stopping file storage cleanup task: {e}", exc_info=True)
 
+        # Stop 365scores file cleanup task
+        scores365 = self.collectors.get("scores365")
+        if isinstance(scores365, Scores365Tracker):
+            try:
+                await scores365.storage.stop_cleanup_task()
+            except Exception as e:
+                logger.error(f"Error stopping 365scores cleanup task: {e}", exc_info=True)
+
         # Stop memory monitor
         if self.memory_monitor:
             try:
@@ -674,9 +731,16 @@ class CollectorCoordinator:
         collector_statuses = {}
 
         for collector_id, collector in self.collectors.items():
+            if isinstance(collector, LiveTracker):
+                collector_type = "live"
+            elif isinstance(collector, Scores365Tracker):
+                collector_type = "scores365"
+            else:
+                collector_type = "daily"
+
             status = {
                 "running": collector.is_running(),
-                "type": "live" if isinstance(collector, LiveTracker) else "daily",
+                "type": collector_type,
                 "sport": collector.sport,
             }
 

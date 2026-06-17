@@ -6,9 +6,13 @@ import logging
 import random
 from playwright.async_api import Page
 
+import re
+
 from src.browser.manager import BrowserManager
 from src.browser.interceptor import ResponseInterceptor
 from src.browser.ws_interceptor import WebSocketInterceptor
+from src.browser.header_capture import HeaderCapture
+from src.browser.api_fetcher import DirectApiFetcher
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -45,6 +49,8 @@ class BaseCollector(ABC):
         self.page: Page | None = None
         self.http_interceptor: ResponseInterceptor | None = None
         self.ws_interceptor: WebSocketInterceptor | None = None
+        self.header_capture: HeaderCapture | None = None
+        self.api_fetcher: DirectApiFetcher | None = None
         self._running = False
         self._task: asyncio.Task | None = None
 
@@ -135,6 +141,17 @@ class BaseCollector(ABC):
 
         self.http_interceptor = await create_interceptor(self.page)
 
+        # Setup header capture + direct API fetcher (uses captured
+        # X-Requested-With token to fetch JSON without page navigation)
+        if settings.enable_direct_fetch:
+            from src.browser.header_capture import create_header_capture
+
+            self.header_capture = await create_header_capture(self.page)
+            self.api_fetcher = DirectApiFetcher(
+                self.page, self.header_capture
+            )
+            logger.debug(f"Direct API fetch enabled for '{self.context_name}'")
+
         # Setup WebSocket interceptor (if enabled)
         if settings.enable_ws_interceptor:
             from src.browser.ws_interceptor import create_ws_interceptor
@@ -205,6 +222,26 @@ class BaseCollector(ABC):
         """
         logger.debug(f"Waiting up to {timeout}s for data interception")
         await asyncio.sleep(timeout)
+
+    async def try_direct_fetch(
+        self,
+        pattern: str,
+        sport: str | None = None,
+        date: str | None = None,
+        url: str | None = None,
+    ) -> tuple[dict, "re.Match"] | None:
+        """Attempt a direct API fetch using the captured token.
+
+        Returns ``(data, match)`` on success, or ``None`` when direct fetch is
+        disabled, no token has been captured yet, or the request failed - in
+        which case the caller should fall back to page navigation.
+        """
+        if not self.api_fetcher:
+            return None
+
+        return await self.api_fetcher.fetch(
+            pattern, sport=sport, date=date, url=url
+        )
 
     async def handle_consent_dialog(self, timeout: float = 5.0) -> bool:
         """

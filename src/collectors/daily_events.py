@@ -75,6 +75,7 @@ class DailyEventsCollector(BaseCollector):
         self.total_days = (self.end_date - self.start_date).days + 1
         self.processed_days = 0
         self._consent_handled = False  # Track if consent dialog was handled
+        self._bootstrapped = False  # True once a page load has seeded the token
 
         logger.info(
             f"DailyEventsCollector initialized for {sport}: "
@@ -149,9 +150,30 @@ class DailyEventsCollector(BaseCollector):
             target_date: Date to collect events for
         """
         date_str = target_date.strftime("%Y-%m-%d")
-        url = self.SCHEDULED_URL_TEMPLATE.format(sport=self.sport, date=date_str)
 
         logger.info(f"Collecting scheduled events for {self.sport} on {date_str}")
+
+        # Once a page load has seeded the X-Requested-With token, fetch each
+        # date's JSON directly instead of navigating a full page.
+        if self._bootstrapped:
+            result = await self.try_direct_fetch(
+                "scheduled", sport=self.sport, date=date_str
+            )
+            if result is not None:
+                data, match = result
+                await self._handle_scheduled_response(data, match)
+                logger.debug(f"Direct fetch complete for {date_str}")
+                return
+            logger.debug(
+                f"Direct fetch unavailable for {date_str}, navigating page"
+            )
+
+        await self._navigate_and_collect(date_str)
+        self._bootstrapped = True
+
+    async def _navigate_and_collect(self, date_str: str) -> None:
+        """Fallback collection: navigate the full page and rely on interception."""
+        url = self.SCHEDULED_URL_TEMPLATE.format(sport=self.sport, date=date_str)
 
         # Navigate to date page
         # Use 'domcontentloaded' instead of 'networkidle' because WebSocket connections
